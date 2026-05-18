@@ -6,6 +6,8 @@ import verticalSvgRaw from '../templates/vertical.svg?raw'
 
 /** @typedef {'horizontal' | 'vertical'} TemplateKey */
 
+/** @typedef {{ type: 'template', templateKey: TemplateKey } | { type: 'free', widthPx: number, heightPx: number }} EditorConfig */
+
 export const TEMPLATE_LAYER_PROP = 'isTemplateLayer'
 
 const TEMPLATE_META = {
@@ -186,6 +188,28 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   canvas.requestRenderAll()
 
   return { width, height, viewBox, templateObject: grouped }
+}
+
+/**
+ * @param {import('fabric').Canvas} canvas
+ * @param {number} width
+ * @param {number} height
+ */
+export function initBlankCanvas(canvas, width, height) {
+  const w = Math.max(1, Number(width) || 1)
+  const h = Math.max(1, Number(height) || 1)
+  const viewBox = { minX: 0, minY: 0, width: w, height: h }
+
+  canvas.clear()
+  canvas.setDimensions({ width: w, height: h })
+  canvas.__logicalSize = { width: w, height: h }
+  canvas.__viewBox = { ...viewBox }
+  canvas.backgroundColor = '#ffffff'
+  canvas.setZoom(1)
+  canvas.calcOffset()
+  canvas.requestRenderAll()
+
+  return { width: w, height: h, viewBox }
 }
 
 /** @param {import('fabric').Canvas} canvas */

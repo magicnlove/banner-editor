@@ -8,10 +8,21 @@ import {
 /**
  * @param {import('fabric').Canvas} canvas
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
+ * @param {{ width: number; height: number }} [logicalSize] —보내기 시 논리 크기(줌 1)
+ * @param {{ preferTtf?: boolean; notoOnly?: boolean }} [embedOptions] — TTF @font-face (일러스트·한글)
+ * @param {{ embedFonts?: boolean }} [options]
  */
-export async function exportFabricToSvg(canvas, customFonts = []) {
-  const wPx = canvas.getWidth()
-  const hPx = canvas.getHeight()
+export async function exportFabricToSvg(
+  canvas,
+  customFonts = [],
+  logicalSize,
+  embedOptions = { preferTtf: true, notoOnly: true },
+  options = {},
+) {
+  const { embedFonts = true } = options
+  const fontEmbedOpts = { preferTtf: true, notoOnly: true, ...embedOptions }
+  const wPx = logicalSize?.width > 0 ? logicalSize.width : canvas.getWidth()
+  const hPx = logicalSize?.height > 0 ? logicalSize.height : canvas.getHeight()
   const families = collectFontFamiliesFromCanvas(canvas)
 
   await ensureFontsReady(families, customFonts)
@@ -23,7 +34,9 @@ export async function exportFabricToSvg(canvas, customFonts = []) {
     viewBox: { x: 0, y: 0, width: wPx, height: hPx },
   })
 
-  inner = await embedFontsInSvgString(inner, families, customFonts)
+  if (embedFonts) {
+    inner = await embedFontsInSvgString(inner, families, customFonts, fontEmbedOpts)
+  }
   inner = substituteNonEmbeddableFontsInSvg(inner)
 
   return inner

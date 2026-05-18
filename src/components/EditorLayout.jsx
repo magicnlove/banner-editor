@@ -5,12 +5,26 @@ import { FabricWorkspace } from './FabricWorkspace'
 import { ToolPanel } from './ToolPanel'
 import { PropertiesPanel } from './PropertiesPanel'
 import { EditorHeader } from './EditorHeader'
+import { EditorDirtyBridge } from './EditorDirtyBridge'
+import { cmToPx } from '../lib/units'
 
-export function EditorLayout({ templateKey, onHome }) {
-  const template = useMemo(() => getTemplate(templateKey), [templateKey])
+/** @param {{ config: import('../lib/template').EditorConfig, onHome: () => void, onDirtyChange?: (dirty: boolean) => void }} props */
+export function EditorLayout({ config, onHome, onDirtyChange }) {
+  const isFree = config.type === 'free'
+  const template = useMemo(
+    () => (isFree ? null : getTemplate(config.templateKey)),
+    [config, isFree],
+  )
 
-  const [canvasWidth, setCanvasWidth] = useState(800)
-  const [canvasHeight, setCanvasHeight] = useState(600)
+  const initialSize = useMemo(() => {
+    if (isFree) {
+      return { width: config.widthPx, height: config.heightPx }
+    }
+    return { width: Math.round(cmToPx(30)), height: Math.round(cmToPx(20)) }
+  }, [config, isFree])
+
+  const [canvasWidth, setCanvasWidth] = useState(initialSize.width)
+  const [canvasHeight, setCanvasHeight] = useState(initialSize.height)
   const [customFonts, setCustomFonts] = useState([])
 
   const onTemplateLoaded = useCallback(({ width, height }) => {
@@ -19,8 +33,8 @@ export function EditorLayout({ templateKey, onHome }) {
   }, [])
 
   const onCanvasSizeChange = useCallback((w, h) => {
-    const nw = Math.min(8000, Math.max(100, Number(w) || 100))
-    const nh = Math.min(8000, Math.max(100, Number(h) || 100))
+    const nw = Math.min(8000, Math.max(38, Number(w) || 38))
+    const nh = Math.min(8000, Math.max(38, Number(h) || 38))
     setCanvasWidth(nw)
     setCanvasHeight(nh)
   }, [])
@@ -31,15 +45,25 @@ export function EditorLayout({ templateKey, onHome }) {
 
   return (
     <EditorProvider>
+      <EditorDirtyBridge onDirtyChange={onDirtyChange} />
       <div className="flex h-full min-h-0 flex-col bg-[#f6f7f9]">
-        <EditorHeader onHome={onHome} customFonts={customFonts} />
+        <EditorHeader
+          onHome={onHome}
+          customFonts={customFonts}
+          editorConfig={config}
+          onWorkStateLoaded={({ logicalSize }) => {
+            setCanvasWidth(logicalSize.width)
+            setCanvasHeight(logicalSize.height)
+          }}
+        />
         <div className="flex min-h-0 min-w-0 flex-1">
           <ToolPanel />
           <FabricWorkspace
             width={canvasWidth}
             height={canvasHeight}
-            templateSvgUrl={template.url}
-            templateSvgRaw={template.raw}
+            isFree={isFree}
+            templateSvgUrl={template?.url ?? null}
+            templateSvgRaw={template?.raw ?? null}
             onTemplateLoaded={onTemplateLoaded}
           />
           <PropertiesPanel

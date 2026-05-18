@@ -10,8 +10,10 @@ import {
   getLogicalSizeFromCanvas,
   isTemplateLayerObject,
   loadTemplateOntoCanvas,
+  initBlankCanvas,
   resizeCanvasLogicalSize,
 } from '../lib/template'
+import { placeObjectAtCanvasCenter } from '../lib/fabricPlacement'
 import { useEditor } from '../context/EditorContext'
 import { CanvasZoomBar } from './CanvasZoomBar'
 import {
@@ -25,6 +27,7 @@ import {
   zoomPercentFromZoom,
 } from '../lib/canvasZoom'
 import { ensureAppFontsReady, loadCanvasTextFontsAndRender } from '../lib/appFonts'
+import { attachCanvasTextOverlay } from '../lib/fabricTextOverlay'
 
 const ZOOM_BTN_FACTOR = 1.12
 
@@ -45,6 +48,7 @@ function viewportInnerPixels(vp) {
 export function FabricWorkspace({
   width,
   height,
+  isFree = false,
   templateSvgUrl,
   templateSvgRaw,
   onTemplateLoaded,
@@ -64,7 +68,8 @@ export function FabricWorkspace({
   const [scrollSizer, setScrollSizer] = useState({ innerW: 0, innerH: 0 })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
-  const { registerCanvas, setSelected, bump } = useEditor()
+  const { registerCanvas, setSelected, bump, registerFitToScreen, runWithoutDirty } =
+    useEditor()
 
   useLayoutEffect(() => {
     sizeRef.current = { width, height }
@@ -183,6 +188,11 @@ export function FabricWorkspace({
   }, [scheduleFit])
 
   useEffect(() => {
+    registerFitToScreen(() => scheduleFitRef.current?.())
+    return () => registerFitToScreen(null)
+  }, [registerFitToScreen])
+
+  useEffect(() => {
     const el = hostRef.current
     if (!el) return
 
@@ -230,25 +240,39 @@ export function FabricWorkspace({
       inst.on('object:added', dirty)
       inst.on('object:removed', dirty)
 
+      attachCanvasTextOverlay(inst)
+
       window.addEventListener('keydown', onKey)
 
       setLoading(true)
       setLoadError(null)
       try {
-        const loaded = await loadTemplateOntoCanvas(
-          inst,
-          templateSvgUrl,
-          templateSvgRaw,
-        )
+        let lw
+        let lh
+        let viewBox
+        if (isFree) {
+          const blank = initBlankCanvas(inst, w, h)
+          lw = blank.width
+          lh = blank.height
+          viewBox = blank.viewBox
+        } else {
+          const loaded = await loadTemplateOntoCanvas(
+            inst,
+            templateSvgUrl,
+            templateSvgRaw,
+          )
+          lw = loaded.width
+          lh = loaded.height
+          viewBox = loaded.viewBox
+        }
         if (cancelled) return
-        const { width: lw, height: lh, viewBox } = loaded
         sizeRef.current = { width: lw, height: lh }
         appliedCanvasSizeRef.current = { width: lw, height: lh }
         inst.__viewBox = viewBox
         await loadCanvasTextFontsAndRender(inst)
         if (cancelled) return
         onTemplateLoaded?.({ width: lw, height: lh })
-        registerCanvas(inst)
+        runWithoutDirty(() => registerCanvas(inst))
         canvasReadyRef.current = true
         if (!cancelled) setLoading(false)
         requestAnimationFrame(() => {
@@ -257,7 +281,7 @@ export function FabricWorkspace({
       } catch (err) {
         if (cancelled) return
         console.error(err)
-        setLoadError('템플릿을 불러오지 못했습니다.')
+        setLoadError(isFree ? '캔버스를 초기화하지 못했습니다.' : '템플릿을 불러오지 못했습니다.')
         setLoading(false)
       }
     }
@@ -276,6 +300,7 @@ export function FabricWorkspace({
       }
     }
   }, [
+    isFree,
     templateSvgUrl,
     templateSvgRaw,
     onTemplateLoaded,
@@ -289,11 +314,19 @@ export function FabricWorkspace({
     if (!inst || !canvasReadyRef.current || loading) return
 
     const prev = appliedCanvasSizeRef.current
-    if (prev && (prev.width !== width || prev.height !== height)) {
+    const logical = getLogicalSizeFromCanvas(inst)
+    const propsChanged =
+      prev && (prev.width !== width || prev.height !== height)
+    const alreadyLogical =
+      Math.abs(logical.width - width) < 1 && Math.abs(logical.height - height) < 1
+
+    if (propsChanged && !alreadyLogical) {
       resizeCanvasLogicalSize(inst, width, height)
       sizeRef.current = { width, height }
       scheduleFit()
       bump()
+    } else if (propsChanged && alreadyLogical) {
+      sizeRef.current = { width, height }
     }
 
     appliedCanvasSizeRef.current = { width, height }
@@ -430,7 +463,8 @@ export function FabricWorkspace({
         const url = URL.createObjectURL(file)
         try {
           const img = await FabricImage.fromURL(url, { crossOrigin: 'anonymous' })
-          img.set({ left: 80, top: 80 })
+          img.set({ originX: 'center', originY: 'center' })
+          placeObjectAtCanvasCenter(inst, img)
           inst.add(img)
           inst.setActiveObject(img)
           inst.requestRenderAll()
@@ -450,7 +484,9 @@ export function FabricWorkspace({
             className="h-10 w-10 animate-spin rounded-full border-2 border-[#d5dae3] border-t-[#FF6600]"
             aria-hidden
           />
-          <p className="text-sm font-medium text-[#5c6370]">템플릿 불러오는 중…</p>
+          <p className="text-sm font-medium text-[#5c6370]">
+            {isFree ? '캔버스 준비 중…' : '템플릿 불러오는 중…'}
+          </p>
         </div>
       )}
       {loadError && !loading && (

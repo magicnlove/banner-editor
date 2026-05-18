@@ -1,39 +1,40 @@
 import { useCallback, useState } from 'react'
 import { ChevronDown, ChevronUp, Lock, Unlock } from 'lucide-react'
+import {
+  PX_PER_CM,
+  cmInputToPx,
+  formatCmFromPx,
+} from '../lib/units'
 
 function clamp(n, min, max) {
   return Math.min(max, Math.max(min, n))
 }
 
 /**
- * @param {number} w
- * @param {number} h
- * @param {boolean} aspectLocked
+ * 변경한 축만 반영. 비율 잠금 시에만 반대 축을 비율에 맞춤.
  * @param {'width' | 'height'} source
- * @param {number} prevW
- * @param {number} prevH
  */
-function applyAspect(w, h, aspectLocked, source, prevW, prevH) {
-  if (!aspectLocked || prevW <= 0 || prevH <= 0) {
+function resolveSizePx(wPx, hPx, aspectLocked, source, prevWPx, prevHPx, min, max) {
+  const w = clamp(Math.round(wPx), min, max)
+  const h = clamp(Math.round(hPx), min, max)
+
+  if (!aspectLocked || prevWPx <= 0 || prevHPx <= 0) {
+    if (source === 'width') return { width: w, height: prevHPx }
+    if (source === 'height') return { width: prevWPx, height: h }
     return { width: w, height: h }
   }
-  const ratio = prevW / prevH
+
+  const ratio = prevWPx / prevHPx
   if (source === 'width') {
-    return { width: w, height: Math.max(1, Math.round(w / ratio)) }
+    return { width: w, height: clamp(Math.round(w / ratio), min, max) }
   }
-  return { width: Math.max(1, Math.round(h * ratio)), height: h }
+  return { width: clamp(Math.round(h * ratio), min, max), height: h }
 }
 
 /**
  * @param {object} props
- * @param {number} props.width
- * @param {number} props.height
- * @param {boolean} props.aspectLocked
- * @param {(locked: boolean) => void} props.onAspectLockedChange
- * @param {(width: number, height: number, source: 'width' | 'height') => void} props.onChange
- * @param {number} [props.min]
- * @param {number} [props.max]
- * @param {boolean} [props.disabled]
+ * @param {number} props.width — px (내부)
+ * @param {number} props.height — px (내부)
  */
 export function DimensionSizeFields({
   width,
@@ -41,7 +42,7 @@ export function DimensionSizeFields({
   aspectLocked,
   onAspectLockedChange,
   onChange,
-  min = 1,
+  min = 38,
   max = 8000,
   disabled = false,
 }) {
@@ -50,42 +51,77 @@ export function DimensionSizeFields({
   const [draftW, setDraftW] = useState('')
   const [draftH, setDraftH] = useState('')
 
-  const displayW = editingW ? draftW : String(Math.round(width))
-  const displayH = editingH ? draftH : String(Math.round(height))
+  const prevWPx = Math.round(width)
+  const prevHPx = Math.round(height)
 
-  const commit = useCallback(
-    (rawW, rawH, source) => {
-      const prevW = Math.round(width)
-      const prevH = Math.round(height)
-      const w = clamp(Math.round(Number(rawW)) || min, min, max)
-      const h = clamp(Math.round(Number(rawH)) || min, min, max)
-      const next = applyAspect(w, h, aspectLocked, source, prevW, prevH)
-      onChange(next.width, next.height, source)
+  const displayW = editingW ? draftW : formatCmFromPx(width)
+  const displayH = editingH ? draftH : formatCmFromPx(height)
+
+  const emit = useCallback(
+    (nextW, nextH, source) => {
+      onChange(nextW, nextH, source)
     },
-    [aspectLocked, width, height, min, max, onChange],
+    [onChange],
+  )
+
+  const commitSource = useCallback(
+    (source, rawValue) => {
+      const parsed =
+        source === 'width'
+          ? cmInputToPx(rawValue) ?? prevWPx
+          : cmInputToPx(rawValue) ?? prevHPx
+
+      const next =
+        source === 'width'
+          ? resolveSizePx(parsed, prevHPx, aspectLocked, 'width', prevWPx, prevHPx, min, max)
+          : resolveSizePx(prevWPx, parsed, aspectLocked, 'height', prevWPx, prevHPx, min, max)
+
+      emit(next.width, next.height, source)
+    },
+    [aspectLocked, prevWPx, prevHPx, min, max, emit],
   )
 
   const nudge = useCallback(
-    (dim, delta) => {
+    (source, deltaCm) => {
       setEditingW(false)
       setEditingH(false)
-      const curW = Math.round(width)
-      const curH = Math.round(height)
-      if (dim === 'width') {
-        commit(curW + delta, curH, 'width')
-      } else {
-        commit(curW, curH + delta, 'height')
-      }
+      const deltaPx = Math.round(deltaCm * PX_PER_CM)
+      if (deltaPx === 0) return
+
+      const next =
+        source === 'width'
+          ? resolveSizePx(
+              prevWPx + deltaPx,
+              prevHPx,
+              aspectLocked,
+              'width',
+              prevWPx,
+              prevHPx,
+              min,
+              max,
+            )
+          : resolveSizePx(
+              prevWPx,
+              prevHPx + deltaPx,
+              aspectLocked,
+              'height',
+              prevWPx,
+              prevHPx,
+              min,
+              max,
+            )
+
+      emit(next.width, next.height, source)
     },
-    [width, height, commit],
+    [aspectLocked, prevWPx, prevHPx, min, max, emit],
   )
 
-  const onWheel = (dim) => (e) => {
+  const onWheel = (source) => (e) => {
     if (disabled) return
     e.preventDefault()
-    const step = e.shiftKey ? 10 : 1
+    const step = e.shiftKey ? 1 : 0.1
     const delta = e.deltaY < 0 ? step : -step
-    nudge(dim, delta)
+    nudge(source, delta)
   }
 
   return (
@@ -116,48 +152,54 @@ export function DimensionSizeFields({
           value={displayW}
           disabled={disabled}
           onFocus={() => {
-            setDraftW(String(Math.round(width)))
+            setDraftW(formatCmFromPx(width))
             setEditingW(true)
           }}
           onChange={setDraftW}
           onBlur={() => {
-            commit(draftW, displayH, 'width')
+            commitSource('width', draftW)
             setEditingW(false)
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault()
-              commit(draftW, displayH, 'width')
+              commitSource('width', draftW)
               setEditingW(false)
               e.currentTarget.blur()
             }
           }}
           onWheel={onWheel('width')}
-          onNudge={(d) => nudge('width', d)}
+          onNudgeUp={() => nudge('width', 0.1)}
+          onNudgeDown={() => nudge('width', -0.1)}
+          onNudgeUpShift={() => nudge('width', 1)}
+          onNudgeDownShift={() => nudge('width', -1)}
         />
         <DimensionField
           label="H"
           value={displayH}
           disabled={disabled}
           onFocus={() => {
-            setDraftH(String(Math.round(height)))
+            setDraftH(formatCmFromPx(height))
             setEditingH(true)
           }}
           onChange={setDraftH}
           onBlur={() => {
-            commit(displayW, draftH, 'height')
+            commitSource('height', draftH)
             setEditingH(false)
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault()
-              commit(displayW, draftH, 'height')
+              commitSource('height', draftH)
               setEditingH(false)
               e.currentTarget.blur()
             }
           }}
           onWheel={onWheel('height')}
-          onNudge={(d) => nudge('height', d)}
+          onNudgeUp={() => nudge('height', 0.1)}
+          onNudgeDown={() => nudge('height', -0.1)}
+          onNudgeUpShift={() => nudge('height', 1)}
+          onNudgeDownShift={() => nudge('height', -1)}
         />
       </div>
     </div>
@@ -173,15 +215,19 @@ function DimensionField({
   onBlur,
   onKeyDown,
   onWheel,
-  onNudge,
+  onNudgeUp,
+  onNudgeDown,
+  onNudgeUpShift,
+  onNudgeDownShift,
 }) {
   return (
-    <label className="text-xs text-[#5c6370]">
-      {label} (px)
+    <div className="text-xs text-[#5c6370]">
+      <span className="font-medium">{label} (cm)</span>
       <div className="mt-1 flex items-stretch overflow-hidden rounded-xl border border-[#e8eaef] bg-white">
         <input
-          type="number"
-          min={1}
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
           disabled={disabled}
           value={value}
           onFocus={onFocus}
@@ -189,14 +235,15 @@ function DimensionField({
           onBlur={onBlur}
           onKeyDown={onKeyDown}
           onWheel={onWheel}
-          className="min-w-0 flex-1 border-0 px-2 py-2 text-sm tabular-nums outline-none disabled:bg-[#f8f9fb] disabled:text-[#c4c9d4]"
+          className="dim-size-input min-w-0 flex-1 border-0 px-2 py-2 text-sm tabular-nums outline-none disabled:bg-[#f8f9fb] disabled:text-[#c4c9d4]"
         />
         <div className="flex flex-col border-l border-[#e8eaef]">
           <button
             type="button"
             disabled={disabled}
-            title="1px 증가 (Shift: 10px)"
-            onClick={(e) => onNudge(e.shiftKey ? 10 : 1)}
+            title="0.1cm 증가 (Shift+클릭: 1cm)"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => (e.shiftKey ? onNudgeUpShift : onNudgeUp)()}
             className="flex flex-1 items-center justify-center px-1.5 text-[#5c6370] hover:bg-[#f0f2f6] disabled:opacity-40"
           >
             <ChevronUp className="h-3.5 w-3.5" />
@@ -204,14 +251,15 @@ function DimensionField({
           <button
             type="button"
             disabled={disabled}
-            title="1px 감소 (Shift: 10px)"
-            onClick={(e) => onNudge(e.shiftKey ? -10 : -1)}
+            title="0.1cm 감소 (Shift+클릭: 1cm)"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => (e.shiftKey ? onNudgeDownShift : onNudgeDown)()}
             className="flex flex-1 items-center justify-center border-t border-[#e8eaef] px-1.5 text-[#5c6370] hover:bg-[#f0f2f6] disabled:opacity-40"
           >
             <ChevronDown className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
-    </label>
+    </div>
   )
 }

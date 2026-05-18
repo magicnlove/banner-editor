@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Pipette, Trash2 } from 'lucide-react'
+import {
+  Pipette,
+  Trash2,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  Bold,
+  Italic,
+  Underline,
+} from 'lucide-react'
 import { useEditor } from '../context/EditorContext'
 import { FontUploadRow } from './ToolPanel'
 import { DimensionSizeFields } from './DimensionSizeFields'
@@ -7,6 +16,13 @@ import { isEyeDropperSupported } from '../lib/eyeDropper'
 import { isTemplateLayerObject } from '../lib/template'
 import { loadCanvasTextFontsAndRender } from '../lib/appFonts'
 import { applyTextToFabricObject } from '../lib/fabricTextSync'
+import { setObjectScaledSizeCentered } from '../lib/fabricPlacement'
+import { getLineLengthPx, setLineLengthPx } from '../lib/fabricTools'
+import {
+  cmInputToPx,
+  cmToPx,
+  formatCmFromPx,
+} from '../lib/units'
 
 const PRESETS = [
   '#FF6600',
@@ -31,10 +47,16 @@ const BASE_FONTS = [
 ]
 
 const EYEDROPPER_UNSUPPORTED_TITLE = 'Chrome/Edge에서만 지원됩니다'
-const CANVAS_SIZE_MIN = 100
+const CANVAS_SIZE_MIN = Math.round(cmToPx(1))
 const CANVAS_SIZE_MAX = 8000
-const OBJECT_SIZE_MIN = 1
+const OBJECT_SIZE_MIN = Math.round(cmToPx(0.1))
 const OBJECT_SIZE_MAX = 8000
+const LINE_LENGTH_MIN = Math.round(cmToPx(0.5))
+const LINE_LENGTH_MAX = 8000
+
+function clampLineLen(px) {
+  return Math.min(LINE_LENGTH_MAX, Math.max(LINE_LENGTH_MIN, px))
+}
 
 function fabricObjectKey(obj) {
   if (!obj) return 'none'
@@ -160,15 +182,125 @@ function getObjectScaledSize(obj) {
   }
 }
 
-/** @param {import('fabric').FabricObject} obj @param {number} w @param {number} h */
-function setObjectScaledSize(obj, w, h) {
-  const baseW = obj.width || 1
-  const baseH = obj.height || 1
-  obj.set({
-    scaleX: w / baseW,
-    scaleY: h / baseH,
-  })
-  obj.setCoords()
+function ToggleIconBtn({ active, title, onClick, children }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg border text-sm transition ${
+        active
+          ? 'border-brand/40 bg-[#fff5ef] text-brand'
+          : 'border-[#e8eaef] text-[#5c6370] hover:bg-[#f0f2f6]'
+      }`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function TextFormattingControls({ selected, applyToSelection }) {
+  const isBold = selected.fontWeight === 'bold' || selected.fontWeight === 700
+  const isItalic = selected.fontStyle === 'italic'
+  const isUnderline = Boolean(selected.underline)
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <span className="text-xs font-medium text-[#5c6370]">정렬</span>
+        <div className="mt-1.5 flex gap-1">
+          {[
+            { align: 'left', Icon: AlignLeft, title: '왼쪽 정렬' },
+            { align: 'center', Icon: AlignCenter, title: '가운데 정렬' },
+            { align: 'right', Icon: AlignRight, title: '오른쪽 정렬' },
+          ].map(({ align, Icon, title }) => (
+            <ToggleIconBtn
+              key={align}
+              title={title}
+              active={(selected.textAlign || 'left') === align}
+              onClick={() => applyToSelection({ textAlign: align })}
+            >
+              <Icon className="h-4 w-4" />
+            </ToggleIconBtn>
+          ))}
+        </div>
+      </div>
+      <div>
+        <span className="text-xs font-medium text-[#5c6370]">스타일</span>
+        <div className="mt-1.5 flex gap-1">
+          <ToggleIconBtn
+            title="굵게"
+            active={isBold}
+            onClick={() =>
+              applyToSelection({ fontWeight: isBold ? 'normal' : 'bold' })
+            }
+          >
+            <Bold className="h-4 w-4" />
+          </ToggleIconBtn>
+          <ToggleIconBtn
+            title="기울임"
+            active={isItalic}
+            onClick={() =>
+              applyToSelection({ fontStyle: isItalic ? 'normal' : 'italic' })
+            }
+          >
+            <Italic className="h-4 w-4" />
+          </ToggleIconBtn>
+          <ToggleIconBtn
+            title="밑줄"
+            active={isUnderline}
+            onClick={() => applyToSelection({ underline: !isUnderline })}
+          >
+            <Underline className="h-4 w-4" />
+          </ToggleIconBtn>
+        </div>
+      </div>
+      <label className="block text-xs text-[#5c6370]">
+        줄간격
+        <input
+          type="number"
+          min={0.5}
+          max={5}
+          step={0.05}
+          value={selected.lineHeight ?? 1.16}
+          onChange={(e) =>
+            applyToSelection({ lineHeight: Number(e.target.value) || 1.16 })
+          }
+          className="mt-1 w-full rounded-xl border border-[#e8eaef] px-2 py-2 text-sm"
+        />
+      </label>
+      <label className="block text-xs text-[#5c6370]">
+        글자간격 (cm)
+        <input
+          type="number"
+          min={-1}
+          max={5}
+          step={0.1}
+          value={formatCmFromPx(selected.charSpacing ?? 0)}
+          onChange={(e) => {
+            const px = cmInputToPx(e.target.value)
+            if (px != null) applyToSelection({ charSpacing: px })
+          }}
+          className="mt-1 w-full rounded-xl border border-[#e8eaef] px-2 py-2 text-sm"
+        />
+      </label>
+      <label className="block text-xs text-[#5c6370]">
+        글자 크기 (cm)
+        <input
+          type="number"
+          min={0.2}
+          max={50}
+          step={0.1}
+          value={formatCmFromPx(selected.fontSize || 40)}
+          onChange={(e) => {
+            const px = cmInputToPx(e.target.value)
+            if (px != null) applyToSelection({ fontSize: Math.max(1, px) })
+          }}
+          className="mt-1 w-full rounded-xl border border-[#e8eaef] px-2 py-2 text-sm"
+        />
+      </label>
+    </div>
+  )
 }
 
 export function PropertiesPanel({
@@ -181,12 +313,14 @@ export function PropertiesPanel({
   const { canvas, selected, revision, setSelected, bump } = useEditor()
   const eyeOk = isEyeDropperSupported()
 
-  const [canvasAspectLocked, setCanvasAspectLocked] = useState(true)
-  const [objectAspectLocked, setObjectAspectLocked] = useState(true)
+  const [canvasAspectLocked, setCanvasAspectLocked] = useState(false)
+  const [objectAspectLocked, setObjectAspectLocked] = useState(false)
 
   const isTemplateLayer = isTemplateLayerObject(selected)
   const isText = selected?.isType?.('Text', 'IText', 'FabricText', 'i-text')
-  const isShape = selected && !isText && !selected?.isType?.('Image')
+  const isLine = selected?.isType?.('Line')
+  const isShape =
+    selected && !isText && !isLine && !selected?.isType?.('Image')
 
   const objectSize =
     selected && !isTemplateLayer
@@ -214,7 +348,7 @@ export function PropertiesPanel({
   const applyObjectSize = useCallback(
     (newW, newH) => {
       if (!selected || !canvas || isTemplateLayer) return
-      setObjectScaledSize(selected, newW, newH)
+      setObjectScaledSizeCentered(selected, newW, newH)
       canvas.requestRenderAll()
       bump()
     },
@@ -306,6 +440,51 @@ export function PropertiesPanel({
               <p className="text-xs text-[#8b919c]">
                 템플릿 레이어는 크기를 변경할 수 없습니다.
               </p>
+            ) : isLine ? (
+              <>
+                <label className="block text-xs text-[#5c6370]">
+                  길이 (cm)
+                  <input
+                    type="number"
+                    min={0.5}
+                    step={0.1}
+                    value={formatCmFromPx(getLineLengthPx(selected))}
+                    onChange={(e) => {
+                      const px = cmInputToPx(e.target.value)
+                      if (px == null || !canvas) return
+                      setLineLengthPx(selected, clampLineLen(px))
+                      canvas.requestRenderAll()
+                      bump()
+                    }}
+                    className="mt-1 w-full rounded-xl border border-[#e8eaef] px-2 py-2 text-sm"
+                  />
+                </label>
+                <label className="block text-xs text-[#5c6370]">
+                  두께 (cm)
+                  <input
+                    type="number"
+                    min={0.05}
+                    max={5}
+                    step={0.05}
+                    value={formatCmFromPx(selected.strokeWidth ?? 2)}
+                    onChange={(e) => {
+                      const px = cmInputToPx(e.target.value)
+                      if (px != null) applyToSelection({ strokeWidth: Math.max(1, px) })
+                    }}
+                    className="mt-1 w-full rounded-xl border border-[#e8eaef] px-2 py-2 text-sm"
+                  />
+                </label>
+                <ColorRow
+                  label="선 색"
+                  value={String(selected.stroke || '#1a1d24')}
+                  onChange={(hex) => applyToSelection({ stroke: hex })}
+                  eyeDropperSupported={eyeOk}
+                  onEye={async () => {
+                    const hex = await eyePick()
+                    if (hex) applyToSelection({ stroke: hex })
+                  }}
+                />
+              </>
             ) : (
               <DimensionSizeFields
                 key={selected.uid ?? selected.id ?? revision}
@@ -360,17 +539,10 @@ export function PropertiesPanel({
                   </select>
                 </label>
                 <FontUploadRow onFontLoaded={onCustomFont} />
-                <label className="block text-xs text-[#5c6370]">
-                  글자 크기 (px)
-                  <input
-                    type="number"
-                    min={8}
-                    max={800}
-                    value={Math.round(selected.fontSize || 40)}
-                    onChange={(e) => applyToSelection({ fontSize: Number(e.target.value) })}
-                    className="mt-1 w-full rounded-xl border border-[#e8eaef] px-2 py-2 text-sm"
-                  />
-                </label>
+                <TextFormattingControls
+                  selected={selected}
+                  applyToSelection={applyToSelection}
+                />
                 <ColorRow
                   label="글자색"
                   value={String(selected.fill || '#111111')}

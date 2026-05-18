@@ -2,8 +2,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// GitHub Pages: 저장소 이름에 맞게 base 경로를 수정하세요.
-export default defineConfig({
+// GitHub Pages: https://magicnlove.github.io/banner-editor/
+// 로컬 dev는 base '/' — 루트(http://localhost:5173/)에서 열림
+export default defineConfig(({ command }) => ({
   plugins: [react(), tailwindcss()],
-  base: '/editor/',
-})
+  base: command === 'serve' ? '/' : '/banner-editor/',
+  optimizeDeps: {
+    include: ['pdf-lib', '@pdf-lib/fontkit', 'fabric'],
+  },
+}))

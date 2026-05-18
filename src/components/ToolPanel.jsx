@@ -5,6 +5,7 @@ import {
   Circle as CircleIcon,
   Triangle as TriangleIcon,
   ImagePlus,
+  Minus,
   ArrowUp,
   ArrowDown,
   Upload,
@@ -16,6 +17,7 @@ import {
   addRectToCanvas,
   addCircleToCanvas,
   addTriangleToCanvas,
+  addLineToCanvas,
   addImageFromFile,
 } from '../lib/fabricTools'
 
@@ -75,6 +77,12 @@ export function ToolPanel() {
             <TriangleIcon className="h-4 w-4" />
           </span>
           삼각형
+        </ToolBtn>
+        <ToolBtn label="선" onClick={() => run(addLineToCanvas)}>
+          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#f1f5f9] text-[#475569]">
+            <Minus className="h-4 w-4" />
+          </span>
+          선
         </ToolBtn>
         <ToolBtn
           label="이미지"
@@ -168,12 +176,15 @@ export function LayerPanel() {
           const active = canvas?.getActiveObject() === o
           const isText = o.isType?.('Text', 'IText', 'FabricText', 'i-text')
           const isImg = o.isType?.('Image')
+          const isLine = o.isType?.('Line')
           const rawText = isText ? o.text : ''
           const label = isText
             ? (rawText?.slice(0, 18) || '텍스트') + (rawText && rawText.length > 18 ? '…' : '')
             : isImg
               ? '이미지'
-              : o.type || '개체'
+              : isLine
+                ? '선'
+                : o.type || '개체'
           return (
             <li key={`${o.type}-${i}-${revision}`}>
               <button

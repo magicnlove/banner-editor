@@ -13,6 +13,7 @@ export async function exportCanvasToDataUrl(
   jpegQuality = 0.92,
 ) {
   await prepareCanvasForRasterExport(canvas, customFonts)
+  await document.fonts.ready
 
   if (format === 'png') {
     return canvas.toDataURL({ format: 'png', multiplier: 1 })

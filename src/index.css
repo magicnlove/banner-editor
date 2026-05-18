@@ -50,3 +50,14 @@ body {
 .fabric-scroll-host::-webkit-scrollbar-track {
   background: #e8eaef;
 }
+
+/* 크기 입력: 브라우저 기본 number 스피너 숨김 (커스텀 화살표만 사용) */
+.dim-size-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.dim-size-input::-webkit-outer-spin-button,
+.dim-size-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
