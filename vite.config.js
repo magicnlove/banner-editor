@@ -2,12 +2,19 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// GitHub Pages: https://magicnlove.github.io/banner-editor/
-// 로컬 dev는 base '/' — 루트(http://localhost:5173/)에서 열림
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   plugins: [react(), tailwindcss()],
-  base: command === 'serve' ? '/' : '/banner-editor/',
+  base: '/',
   optimizeDeps: {
-    include: ['pdf-lib', '@pdf-lib/fontkit', 'fabric'],
+    include: ['fabric'],
   },
-}))
+  server: {
+    // 로컬: vercel dev (기본 3000) 실행 시 API 프록시
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      },
+    },
+  },
+})

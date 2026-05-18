@@ -2,21 +2,22 @@
   "name": "editor",
   "private": true,
   "version": "0.0.0",
-  "homepage": "https://magicnlove.github.io/banner-editor/",
+  "homepage": "/",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "dev:api": "vercel dev",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },
   "dependencies": {
-    "@pdf-lib/fontkit": "^1.1.1",
+    "@sparticuz/chromium": "^148.0.0",
     "fabric": "^7.3.1",
     "lucide-react": "^1.16.0",
-    "pdf-lib": "^1.17.1",
+    "puppeteer-core": "^25.0.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
