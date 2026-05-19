@@ -143,6 +143,44 @@ function markAsTemplateLayer(obj) {
 }
 
 /**
+ * @param {import('fabric').FabricObject} group
+ * @param {{ minX: number; minY: number; width: number; height: number }} viewBox
+ */
+function alignTemplateGroupToViewBox(group, viewBox) {
+  group.set({ originX: 'left', originY: 'top' })
+  group.setCoords()
+  const br = group.getBoundingRect(true, true)
+  group.set({
+    left: (group.left ?? 0) + (viewBox.minX - br.left),
+    top: (group.top ?? 0) + (viewBox.minY - br.top),
+  })
+  group.setCoords()
+}
+
+/**
+ * @param {import('fabric').Canvas} canvas
+ * @param {number} width
+ * @param {number} height
+ * @param {{ minX?: number; minY?: number; width?: number; height?: number }} [viewBox]
+ */
+export function applyTemplateCanvasDimensions(canvas, width, height, viewBox) {
+  const w = Math.max(1, Math.round(width))
+  const h = Math.max(1, Math.round(height))
+  canvas.setZoom(1)
+  canvas.setDimensions({ width: w, height: h })
+  canvas.__logicalSize = { width: w, height: h }
+  if (viewBox) {
+    canvas.__viewBox = {
+      minX: viewBox.minX ?? 0,
+      minY: viewBox.minY ?? 0,
+      width: viewBox.width ?? w,
+      height: viewBox.height ?? h,
+    }
+  }
+  canvas.calcOffset()
+}
+
+/**
  * @param {import('fabric').Canvas} canvas
  * @param {string} svgUrl
  * @param {string} [svgRaw]
@@ -175,16 +213,13 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   markAsTemplateLayer(grouped)
 
   canvas.clear()
-  canvas.setDimensions({ width, height })
-  canvas.__logicalSize = { width, height }
-  canvas.__viewBox = { ...viewBox }
   canvas.backgroundColor = '#ffffff'
-  canvas.setZoom(1)
+  applyTemplateCanvasDimensions(canvas, width, height, viewBox)
 
   canvas.add(grouped)
+  alignTemplateGroupToViewBox(grouped, viewBox)
   canvas.sendObjectToBack(grouped)
 
-  canvas.calcOffset()
   canvas.requestRenderAll()
 
   return { width, height, viewBox, templateObject: grouped }
@@ -201,12 +236,8 @@ export function initBlankCanvas(canvas, width, height) {
   const viewBox = { minX: 0, minY: 0, width: w, height: h }
 
   canvas.clear()
-  canvas.setDimensions({ width: w, height: h })
-  canvas.__logicalSize = { width: w, height: h }
-  canvas.__viewBox = { ...viewBox }
   canvas.backgroundColor = '#ffffff'
-  canvas.setZoom(1)
-  canvas.calcOffset()
+  applyTemplateCanvasDimensions(canvas, w, h, viewBox)
   canvas.requestRenderAll()
 
   return { width: w, height: h, viewBox }

@@ -105,17 +105,30 @@ export default async function handler(req, res) {
     })
     console.log('page content set')
 
+    const pdfTextDivCount = (htmlWithFonts.match(/class="pdf-text"/g) || []).length
+    const hasPdfTextLayer = htmlWithFonts.includes('pdf-text-layer')
+    console.log('html length:', htmlWithFonts.length)
+    console.log('pdf-text div count:', pdfTextDivCount)
+    console.log('has pdf-text-layer:', hasPdfTextLayer)
+    if (pdfTextDivCount === 0) {
+      const bodySnippet = htmlWithFonts.replace(/\s+/g, ' ').slice(0, 800)
+      console.log('html body snippet:', bodySnippet)
+    }
+
     await page.evaluateHandle('document.fonts.ready')
     console.log('fonts ready')
     await new Promise((resolve) => setTimeout(resolve, 1000))
     console.log('font load delay done')
+
+    await page.emulateMediaType('screen')
 
     console.log('generating pdf...')
     const pdf = await page.pdf({
       width: `${w}px`,
       height: `${h}px`,
       printBackground: true,
-      preferCSSPageSize: true,
+      tagged: true,
+      preferCSSPageSize: false,
     })
     console.log('PDF generated, size:', pdf.length)
 

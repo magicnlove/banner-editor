@@ -1,6 +1,6 @@
 import { useMemo, useState, useCallback } from 'react'
 import { EditorProvider } from '../context/EditorContext'
-import { getTemplate } from '../lib/template'
+import { getTemplate, parseViewBoxFromSvgString } from '../lib/template'
 import { FabricWorkspace } from './FabricWorkspace'
 import { ToolPanel } from './ToolPanel'
 import { PropertiesPanel } from './PropertiesPanel'
@@ -20,8 +20,15 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
     if (isFree) {
       return { width: config.widthPx, height: config.heightPx }
     }
+    const vb = template?.raw ? parseViewBoxFromSvgString(template.raw) : null
+    if (vb) {
+      return {
+        width: Math.max(1, Math.round(vb.width)),
+        height: Math.max(1, Math.round(vb.height)),
+      }
+    }
     return { width: Math.round(cmToPx(30)), height: Math.round(cmToPx(20)) }
-  }, [config, isFree])
+  }, [config, isFree, template])
 
   const [canvasWidth, setCanvasWidth] = useState(initialSize.width)
   const [canvasHeight, setCanvasHeight] = useState(initialSize.height)

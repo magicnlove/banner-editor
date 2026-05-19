@@ -12,6 +12,8 @@ import {
   loadTemplateOntoCanvas,
   initBlankCanvas,
   resizeCanvasLogicalSize,
+  parseViewBoxFromSvgString,
+  applyTemplateCanvasDimensions,
 } from '../lib/template'
 import { placeObjectAtCanvasCenter } from '../lib/fabricPlacement'
 import { useEditor } from '../context/EditorContext'
@@ -217,7 +219,15 @@ export function FabricWorkspace({
       await ensureAppFontsReady()
       if (cancelled) return
 
-      const { width: w, height: h } = sizeRef.current
+      let { width: w, height: h } = sizeRef.current
+      if (!isFree && templateSvgRaw) {
+        const vb = parseViewBoxFromSvgString(templateSvgRaw)
+        if (vb) {
+          w = Math.max(1, Math.round(vb.width))
+          h = Math.max(1, Math.round(vb.height))
+          sizeRef.current = { width: w, height: h }
+        }
+      }
       inst = new Canvas(el, {
         width: w,
         height: h,
@@ -268,7 +278,7 @@ export function FabricWorkspace({
         if (cancelled) return
         sizeRef.current = { width: lw, height: lh }
         appliedCanvasSizeRef.current = { width: lw, height: lh }
-        inst.__viewBox = viewBox
+        applyTemplateCanvasDimensions(inst, lw, lh, viewBox)
         await loadCanvasTextFontsAndRender(inst)
         if (cancelled) return
         onTemplateLoaded?.({ width: lw, height: lh })
@@ -327,6 +337,8 @@ export function FabricWorkspace({
       bump()
     } else if (propsChanged && alreadyLogical) {
       sizeRef.current = { width, height }
+      applyTemplateCanvasDimensions(inst, logical.width, logical.height, inst.__viewBox)
+      scheduleFit()
     }
 
     appliedCanvasSizeRef.current = { width, height }
