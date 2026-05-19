@@ -1,3 +1,4 @@
+/* NotoSansKR-Regular.woff2 = korean-400, NotoSansKR-SemiBold.woff2 = korean-600 (fontsource) */
 @font-face {
   font-family: 'Noto Sans KR';
   src: url('./NotoSansKR-Regular.woff2') format('woff2');
@@ -10,6 +11,14 @@
   font-family: 'Noto Sans KR';
   src: url('./NotoSansKR-SemiBold.woff2') format('woff2');
   font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans KR';
+  src: url('./NotoSansKR-SemiBold.woff2') format('woff2');
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
