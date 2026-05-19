@@ -21,29 +21,24 @@ export function getCanvasLogicalSize(canvas, fallback) {
  * DOM 표시 크기 = __logicalSize×줌. setZoom + setDimensions 동기화.
  * @returns {number} 적용된 줌 (0.1~3)
  */
-export function applyDisplayZoom(canvas, logicalW, logicalH, zoom) {
+export function applyDisplayZoom(canvas, fallbackW, fallbackH, zoom) {
   const z = clampZoom(zoom)
-  const logical = getLogicalSizeFromCanvas(canvas, {
-    width: logicalW,
-    height: logicalH,
-  })
+  const viewBox = canvas.__viewBox
+  const logicalW = viewBox?.width ?? canvas.__logicalSize?.width ?? fallbackW
+  const logicalH = viewBox?.height ?? canvas.__logicalSize?.height ?? fallbackH
+
   canvas.setZoom(z)
-  const dw = logical.width * z
-  const dh = logical.height * z
-  console.log('[setDimensions]', 'applyDisplayZoom', {
-    width: dw,
-    height: dh,
-    zoom: z,
-    logicalW: logical.width,
-    logicalH: logical.height,
-    passedW: logicalW,
-    passedH: logicalH,
-    __viewBox: canvas.__viewBox,
-    __logicalSize: canvas.__logicalSize,
+  console.log('[applyDisplayZoom setDimensions]', {
+    logicalW,
+    logicalH,
+    viewBox: canvas.__viewBox,
+    logicalSize: canvas.__logicalSize,
+    finalW: logicalW * z,
+    finalH: logicalH * z,
   })
   canvas.setDimensions({
-    width: dw,
-    height: dh,
+    width: Math.round(logicalW * z),
+    height: Math.round(logicalH * z),
   })
   ensureCanvasLogicalSizeFromViewBox(canvas, 'applyDisplayZoom')
   canvas.calcOffset()
