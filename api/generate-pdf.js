@@ -4,22 +4,8 @@ import { loadServerFontsForFamilies } from './pdfFonts.js'
 
 chromium.setGraphicsMode = false
 
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 function escapeCssFontFamily(family) {
   return String(family).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-}
-
-function cssFontWeight(fontWeight) {
-  if (fontWeight === 'bold') return 'bold'
-  const n = Number(fontWeight)
-  return Number.isFinite(n) && n >= 600 ? 'bold' : 'normal'
 }
 
 /**
@@ -49,113 +35,25 @@ function buildFontFaceCss(fonts) {
 }
 
 /**
- * @param {object} t
- */
-function buildTextDivHtml(t) {
-  const fontSize = Math.max(1, Number(t.fontSize || 16) * Number(t.scaleY || 1))
-  const scaleX = Number(t.scaleX) || 1
-  const lineHeight = t.lineHeight ?? 1.16
-  const charSpacing = Number(t.charSpacing) || 0
-  const letterSpacing =
-    charSpacing !== 0 ? `${(fontSize * charSpacing) / 1000}px` : 'normal'
-  const family = escapeCssFontFamily(String(t.fontFamily || 'Noto Sans KR'))
-  const angle = Number(t.angle) || 0
-  const width = Number(t.width) > 0 ? `width: ${Number(t.width)}px;` : ''
-  const minHeight =
-    Number(t.height) > 0
-      ? `min-height: ${Number(t.height)}px;`
-      : `min-height: ${fontSize * lineHeight}px;`
-
-  const transforms = []
-  if (Math.abs(scaleX - 1) > 0.001) transforms.push(`scaleX(${scaleX})`)
-  if (Math.abs(angle) > 0.001) transforms.push(`rotate(${angle}deg)`)
-  const transform = transforms.length ? `transform: ${transforms.join(' ')};` : ''
-  const transformOrigin =
-    transforms.length > 0 ? 'transform-origin: top left;' : ''
-
-  return `<div class="pdf-text" style="
-    position: absolute;
-    left: ${Number(t.left) || 0}px;
-    top: ${Number(t.top) || 0}px;
-    ${width}
-    ${minHeight}
-    font-size: ${fontSize}px;
-    font-family: '${family}', 'Noto Sans KR', sans-serif;
-    font-weight: ${cssFontWeight(t.fontWeight)};
-    color: ${escapeHtml(t.fill || '#1a1d24')};
-    text-align: ${t.textAlign || 'left'};
-    line-height: ${lineHeight};
-    letter-spacing: ${letterSpacing};
-    white-space: pre;
-    opacity: ${Number(t.opacity ?? 1)};
-    ${transform}
-    ${transformOrigin}
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-  ">${escapeHtml(t.text ?? '')}</div>`
-}
-
-/**
- * @param {number} width
- * @param {number} height
- * @param {string} bgImage
- * @param {object[]} textObjects
+ * @param {string} html
  * @param {string} fontFaceCss
  */
-function buildPdfHtmlDocument(width, height, bgImage, textObjects, fontFaceCss) {
-  const textLayer = (Array.isArray(textObjects) ? textObjects : [])
-    .map(buildTextDivHtml)
-    .join('\n')
+function embedFontsInHtml(html, fontFaceCss) {
+  if (!fontFaceCss) return html
+
+  const styleBlock = `<style>\n${fontFaceCss}\n</style>`
+
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/<head[^>]*>/i, (match) => `${match}\n${styleBlock}`)
+  }
 
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
-  <style>
-${fontFaceCss}
-
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: ${width}px;
-      height: ${height}px;
-      overflow: hidden;
-    }
-    .pdf-canvas {
-      position: relative;
-      width: ${width}px;
-      height: ${height}px;
-      font-family: 'Noto Sans KR', sans-serif;
-    }
-    .pdf-bg {
-      position: absolute;
-      left: 0;
-      top: 0;
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: fill;
-    }
-    .pdf-text-layer {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1;
-      pointer-events: none;
-    }
-    .pdf-text {
-      margin: 0;
-      padding: 0;
-    }
-  </style>
+  ${styleBlock}
 </head>
-<body>
-  <div class="pdf-canvas">
-    <img class="pdf-bg" src="${bgImage}" width="${width}" height="${height}" alt="" />
-    <div class="pdf-text-layer">${textLayer}</div>
-  </div>
-</body>
+<body>${html}</body>
 </html>`
 }
 
@@ -169,7 +67,7 @@ function resolvePdfFonts(usedFonts, customFonts) {
   return [...serverFonts, ...uploaded]
 }
 
-/** Vercel serverless: JPEG 배경 + 텍스트 레이어 → PDF */
+/** Vercel serverless: HTML(SVG + 텍스트 레이어) → PDF */
 export default async function handler(req, res) {
   console.log('=== PDF API called ===')
   console.log('method:', req.method)
@@ -182,17 +80,10 @@ export default async function handler(req, res) {
 
   let browser
   try {
-    const {
-      bgImage,
-      width,
-      height,
-      usedFonts,
-      textObjects,
-      fonts: customFonts,
-    } = req.body ?? {}
+    const { html, width, height, usedFonts, fonts: customFonts } = req.body ?? {}
 
-    if (!bgImage || typeof bgImage !== 'string') {
-      return res.status(400).json({ error: 'bgImage is required' })
+    if (!html || typeof html !== 'string') {
+      return res.status(400).json({ error: 'html is required' })
     }
 
     const w = Number(width)
@@ -204,20 +95,13 @@ export default async function handler(req, res) {
     const fontFamilies = Array.isArray(usedFonts) ? usedFonts : ['Noto Sans KR']
     const allFonts = resolvePdfFonts(fontFamilies, customFonts)
     const fontFaceCss = buildFontFaceCss(allFonts)
-    const html = buildPdfHtmlDocument(
-      w,
-      h,
-      bgImage,
-      textObjects,
-      fontFaceCss,
-    )
+    const htmlWithFonts = embedFontsInHtml(html, fontFaceCss)
 
     console.log('usedFonts:', fontFamilies)
-    console.log('textObjects:', Array.isArray(textObjects) ? textObjects.length : 0)
     console.log('server + custom font rules:', allFonts.length)
-    console.log('html length:', html.length)
+    console.log('font-face rules length:', fontFaceCss.length)
+    console.log('html length:', htmlWithFonts.length)
 
-    console.log('launching browser...')
     browser = await puppeteer.launch({
       args: chromium.args,
       defaultViewport: null,
@@ -228,7 +112,7 @@ export default async function handler(req, res) {
     const page = await browser.newPage()
     await page.setViewport({ width: w, height: h })
 
-    await page.setContent(html, {
+    await page.setContent(htmlWithFonts, {
       waitUntil: 'networkidle0',
       timeout: 30_000,
     })

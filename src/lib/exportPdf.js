@@ -1,10 +1,8 @@
 /**
- * Fabric → JPEG 배경 + 텍스트 JSON → Puppeteer PDF
+ * Fabric → SVG(도형) + HTML 텍스트 → Puppeteer PDF (텍스트 선택·복사 가능)
  */
-import {
-  collectUsedFontsForPdfApi,
-  prepareCanvasForRasterExport,
-} from './exportFonts'
+import { collectUsedFontsForPdfApi } from './exportFonts'
+import { exportFabricToSvg } from './exportSvg'
 import {
   getLogicalSizeFromCanvas,
   isTemplateLayerObject,
@@ -12,8 +10,9 @@ import {
   fitTemplateToCanvas,
 } from './template'
 import {
-  extractTextObjectsForPdf,
-  withUserTextHidden,
+  buildHtmlTextLayer,
+  collectUserTextObjectsForPdf,
+  exportSvgWithUserTextHidden,
 } from './exportPdfHtmlText'
 import {
   prepareCanvasForExport,
@@ -25,17 +24,58 @@ const PDF_API_URL =
   import.meta.env.VITE_PDF_API_URL || '/api/generate-pdf'
 
 /**
- * @param {import('fabric').Canvas} canvas
- * @param {Array<{ family: string; fileData?: ArrayBuffer }>} customFonts
+ * @param {number} width
+ * @param {number} height
+ * @param {string} svgInner
+ * @param {string} textLayerHtml
  */
-async function capturePdfBackground(canvas, customFonts) {
-  await prepareCanvasForRasterExport(canvas, customFonts)
-
-  return withUserTextHidden(canvas, async () => {
-    canvas.requestRenderAll()
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
-    return canvas.toDataURL({ format: 'jpeg', quality: 0.85, multiplier: 1 })
-  })
+function buildPdfHtmlDocument(width, height, svgInner, textLayerHtml) {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: ${width}px;
+      height: ${height}px;
+      overflow: hidden;
+    }
+    .pdf-canvas {
+      position: relative;
+      width: ${width}px;
+      height: ${height}px;
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+    .pdf-canvas > svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      display: block;
+      width: ${width}px;
+      height: ${height}px;
+    }
+    .pdf-text-layer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    .pdf-text {
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="pdf-canvas">
+    ${svgInner}
+    ${textLayerHtml}
+  </div>
+</body>
+</html>`
 }
 
 /**
@@ -54,7 +94,6 @@ export async function exportFabricToPdf(canvas, customFonts = [], options = {}) 
     if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
       fitTemplateToCanvas(canvas)
     }
-
     const logical = getLogicalSizeFromCanvas(canvas)
     const width = logical.width
     const height = logical.height
@@ -70,24 +109,32 @@ export async function exportFabricToPdf(canvas, customFonts = [], options = {}) 
       throw new Error('캔버스 크기를 확인할 수 없습니다.')
     }
 
-    const bgImage = await capturePdfBackground(canvas, customFonts)
-    if (!bgImage?.startsWith('data:image/')) {
-      throw new Error('배경 이미지를 캡처하지 못했습니다.')
-    }
-
-    const textObjects = extractTextObjectsForPdf(canvas)
     const { usedFonts, customFonts: customFontPayloads } =
       collectUsedFontsForPdfApi(canvas, customFonts)
+
+    const userTexts = collectUserTextObjectsForPdf(canvas)
+    const textLayerHtml = buildHtmlTextLayer(userTexts)
+
+    const svgInner = await exportSvgWithUserTextHidden(canvas, () =>
+      exportFabricToSvg(
+        canvas,
+        customFonts,
+        logical,
+        { notoOnly: false },
+        { embedFonts: false },
+      ),
+    )
+
+    const html = buildPdfHtmlDocument(width, height, svgInner, textLayerHtml)
 
     const res = await fetch(PDF_API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        bgImage,
+        html,
         width,
         height,
         usedFonts,
-        textObjects,
         fonts: customFontPayloads,
       }),
     })
