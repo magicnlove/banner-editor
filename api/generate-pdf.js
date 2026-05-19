@@ -91,6 +91,8 @@ export default async function handler(req, res) {
     if (!(w > 0 && h > 0) || !Number.isFinite(w) || !Number.isFinite(h)) {
       return res.status(400).json({ error: 'width and height must be positive numbers' })
     }
+    const pdfW = Math.round(w)
+    const pdfH = Math.round(h)
 
     const fontFamilies = Array.isArray(usedFonts) ? usedFonts : ['Noto Sans KR']
     const allFonts = resolvePdfFonts(fontFamilies, customFonts)
@@ -110,7 +112,11 @@ export default async function handler(req, res) {
     })
 
     const page = await browser.newPage()
-    await page.setViewport({ width: w, height: h })
+    await page.setViewport({
+      width: pdfW,
+      height: pdfH,
+      deviceScaleFactor: 1,
+    })
 
     await page.setContent(htmlWithFonts, {
       waitUntil: 'networkidle0',
@@ -122,11 +128,10 @@ export default async function handler(req, res) {
     await page.emulateMediaType('screen')
 
     const pdf = await page.pdf({
-      width: `${w}px`,
-      height: `${h}px`,
+      width: `${pdfW}px`,
+      height: `${pdfH}px`,
       printBackground: true,
       tagged: true,
-      preferCSSPageSize: false,
     })
 
     await browser.close()
