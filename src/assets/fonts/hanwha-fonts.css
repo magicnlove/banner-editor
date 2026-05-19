@@ -1,0 +1,23 @@
+@font-face {
+  font-family: 'Hanwha';
+  src: url('./HanwhaR.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'HGG Gothic 40';
+  src: url('./HGGGothicssi_40g.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'HGG Gothic 99';
+  src: url('./HGGGothicssi_99g.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

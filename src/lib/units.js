@@ -14,9 +14,16 @@ export function cmToPt(cm) {
   return (cm * 72) / 2.54
 }
 
-/** @param {number} px */
-export function formatCmFromPx(px) {
-  return (px / PX_PER_CM).toFixed(1)
+/** @param {number} px @param {number} [fractionDigits] */
+export function formatCmFromPx(px, fractionDigits = 1) {
+  return (px / PX_PER_CM).toFixed(fractionDigits)
+}
+
+/** cm 입력 → px (선 두께 등 서브픽셀 허용) */
+export function cmInputToPxFloat(cmStr) {
+  const cm = parseCmInput(cmStr)
+  if (cm == null) return null
+  return cmToPx(cm)
 }
 
 /** @param {number} cm */

@@ -55,6 +55,28 @@ export function preserveLogicalPx(value) {
 }
 
 /**
+ * canvas.setDimensions 호출 추적 (919px 등 원인 디버그)
+ * @param {import('fabric').Canvas} canvas
+ * @param {number} width
+ * @param {number} height
+ * @param {string} source
+ */
+export function setCanvasDimensionsWithLog(canvas, width, height, source) {
+  const w = Number(width)
+  const h = Number(height)
+  console.log('[canvas.setDimensions]', source, {
+    width: w,
+    height: h,
+    __logicalSize: canvas.__logicalSize,
+    __viewBox: canvas.__viewBox,
+    zoom: canvas.getZoom?.() ?? 1,
+    beforeGetWidth: canvas.getWidth?.(),
+    beforeGetHeight: canvas.getHeight?.(),
+  })
+  canvas.setDimensions({ width: w, height: h })
+}
+
+/**
  * 문서 논리 크기 =보내기 해상도 (줌과 무관)
  * @param {import('fabric').Canvas} canvas
  * @param {number} width
@@ -134,10 +156,12 @@ export function logicalSizeFromViewBox(viewBox) {
 export function syncCanvasBufferToLogicalZoom(canvas) {
   const { width, height } = getLogicalSizeFromCanvas(canvas)
   const z = canvas.getZoom() || 1
-  canvas.setDimensions({
-    width: Math.round(width * z),
-    height: Math.round(height * z),
-  })
+  setCanvasDimensionsWithLog(
+    canvas,
+    Math.round(width * z),
+    Math.round(height * z),
+    'template.js:syncCanvasBufferToLogicalZoom',
+  )
   canvas.calcOffset()
 }
 
@@ -156,7 +180,7 @@ export function setCanvasDocumentSize(canvas, width, height, viewBoxMeta) {
   }
   setCanvasLogicalSize(canvas, w, h)
   canvas.setZoom(1)
-  canvas.setDimensions({ width: w, height: h })
+  setCanvasDimensionsWithLog(canvas, w, h, 'template.js:setCanvasDocumentSize')
   canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
   canvas.calcOffset()
 }
@@ -182,48 +206,6 @@ function markAsTemplateLayer(obj) {
   })
   obj[TEMPLATE_LAYER_PROP] = true
   return obj
-}
-
-/**
- * getBoundingRect() 기준 (0,0) 정렬 — 스케일 변경 없음
- * @param {import('fabric').FabricObject} group
- */
-export function alignTemplateGroupToOrigin(group) {
-  group.setCoords()
-  const br = group.getBoundingRect(true, true)
-  if (!(br.width > 0 && br.height > 0)) return null
-
-  group.set({
-    left: (group.left ?? 0) - br.left,
-    top: (group.top ?? 0) - br.top,
-  })
-  group.setCoords()
-
-  const aligned = group.getBoundingRect(true, true)
-  return {
-    width: preserveLogicalPx(aligned.width),
-    height: preserveLogicalPx(aligned.height),
-    boundingRect: aligned,
-  }
-}
-
-/**
- * 로드 직후: bbox 크기로 캔버스·__logicalSize 설정, 그룹 (0,0) 정렬
- * @param {import('fabric').Canvas} canvas
- * @param {import('fabric').FabricObject} group
- * @param {{ minX: number; minY: number; width: number; height: number } | null} [viewBoxMeta]
- */
-export function setupTemplateCanvasFromBoundingRect(canvas, group, viewBoxMeta = null) {
-  const measured = alignTemplateGroupToOrigin(group)
-  if (!measured) {
-    throw new Error('Template group has no measurable bounds')
-  }
-  const { width, height } = measured
-  if (viewBoxMeta) {
-    canvas.__viewBox = cloneViewBox(viewBoxMeta)
-  }
-  setCanvasDocumentSize(canvas, width, height, viewBoxMeta ?? undefined)
-  return measured
 }
 
 /**
@@ -267,7 +249,31 @@ export function fitTemplateToCanvas(canvas) {
 }
 
 /**
- * 논리 캔버스 크기 변경 — 모든 오브젝트 동일 비율 스케일 + 템플릿 재맞춤
+ * @param {import('fabric').FabricObject} obj
+ * @param {number} scaleX
+ * @param {number} scaleY
+ */
+function scaleObjectForCanvasResize(obj, scaleX, scaleY) {
+  const strokeScale = (scaleX + scaleY) / 2
+  const patch = {
+    left: (obj.left ?? 0) * scaleX,
+    top: (obj.top ?? 0) * scaleY,
+    scaleX: (obj.scaleX ?? 1) * scaleX,
+    scaleY: (obj.scaleY ?? 1) * scaleY,
+  }
+  if (obj.strokeWidth != null && obj.strokeWidth > 0) {
+    patch.strokeWidth = obj.strokeWidth * strokeScale
+  }
+  const type = obj.type
+  if ((type === 'textbox' || type === 'i-text' || type === 'text') && obj.width != null) {
+    patch.width = (obj.width ?? 0) * scaleX
+  }
+  obj.set(patch)
+  obj.setCoords()
+}
+
+/**
+ * 논리 캔버스 크기 변경 — 템플릿 포함 모든 오브젝트에 동일 비율 스케일
  * @param {import('fabric').Canvas} canvas
  * @param {number} newWidth
  * @param {number} newHeight
@@ -287,18 +293,25 @@ export function resizeCanvasLogicalSize(canvas, newWidth, newHeight) {
   canvas.discardActiveObject()
 
   for (const obj of canvas.getObjects()) {
-    obj.set({
-      left: (obj.left ?? 0) * scaleX,
-      top: (obj.top ?? 0) * scaleY,
-      scaleX: (obj.scaleX ?? 1) * scaleX,
-      scaleY: (obj.scaleY ?? 1) * scaleY,
-    })
-    obj.setCoords()
+    scaleObjectForCanvasResize(obj, scaleX, scaleY)
   }
 
   setCanvasLogicalSize(canvas, nw, nh)
-  syncCanvasBufferToLogicalZoom(canvas)
-  fitTemplateToCanvas(canvas)
+  if (canvas.__viewBox) {
+    canvas.__viewBox = cloneViewBox({
+      minX: canvas.__viewBox.minX,
+      minY: canvas.__viewBox.minY,
+      width: nw,
+      height: nh,
+    })
+  }
+
+  const z = canvas.getZoom() || 1
+  canvas.setDimensions({
+    width: Math.round(nw * z),
+    height: Math.round(nh * z),
+  })
+  canvas.calcOffset()
   canvas.requestRenderAll()
 
   return { scaleX, scaleY, oldWidth: oldW, oldHeight: oldH, newWidth: nw, newHeight: nh }
@@ -337,7 +350,10 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   }
 
   const parsedViewBox = parseViewBoxFromSvgString(svgRaw)
-  const viewBox = parsedViewBox ? cloneViewBox(parsedViewBox) : null
+  if (!parsedViewBox) {
+    throw new Error('SVG template has no viewBox')
+  }
+  const viewBox = cloneViewBox(parsedViewBox)
 
   const parsed = await loadSVGFromString(svgRaw)
   const objects = (parsed.objects ?? []).filter(Boolean)
@@ -351,15 +367,22 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
 
   canvas.clear()
   canvas.backgroundColor = '#ffffff'
+
+  canvas.setDimensions({ width: viewBox.width, height: viewBox.height })
+  setCanvasLogicalSize(canvas, viewBox.width, viewBox.height)
+  canvas.__viewBox = viewBox
+
   canvas.add(grouped)
   canvas.sendObjectToBack(grouped)
 
-  const { width, height } = setupTemplateCanvasFromBoundingRect(canvas, grouped, viewBox)
-
-  logTemplateCanvasMetrics(canvas, grouped, 'after loadTemplateOntoCanvas')
   canvas.requestRenderAll()
 
-  return { width, height, viewBox, templateObject: grouped }
+  return {
+    width: viewBox.width,
+    height: viewBox.height,
+    viewBox,
+    templateObject: grouped,
+  }
 }
 
 /**

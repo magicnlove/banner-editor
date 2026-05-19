@@ -7,6 +7,7 @@ const HANWHA_CARDS = [
     id: 'horizontal',
     title: '가로형 현수막',
     thumbClass: 'h-24 w-64 rounded-lg',
+    cardClass: 'justify-center items-center',
   },
   {
     id: 'vertical',
@@ -61,12 +62,12 @@ export function TemplatePicker({ onSelect }) {
               <p className="mt-1 text-sm text-[#5c6370]">공식 현수막 템플릿으로 시작합니다</p>
             </div>
             <div className="flex flex-wrap items-stretch justify-center gap-8 sm:gap-12">
-              {HANWHA_CARDS.map(({ id, title, thumbClass }) => (
+              {HANWHA_CARDS.map(({ id, title, thumbClass, cardClass }) => (
                 <button
                   key={id}
                   type="button"
                   onClick={() => onSelect({ type: 'template', templateKey: id })}
-                  className="flex w-full min-w-0 max-w-[min(22rem,calc(100vw-3rem))] flex-col items-center gap-6 rounded-2xl border border-[#e8eaef] bg-white px-8 py-8 text-center shadow-md transition-colors hover:border-[#FF6600] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#FF6600] focus-visible:ring-offset-4 sm:w-auto sm:min-w-[18rem]"
+                  className={`flex w-full min-w-0 max-w-[min(22rem,calc(100vw-3rem))] flex-col gap-6 rounded-2xl border border-[#e8eaef] bg-white px-8 py-8 text-center shadow-md transition-colors hover:border-[#FF6600] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#FF6600] focus-visible:ring-offset-4 sm:w-auto sm:min-w-[18rem] ${cardClass ?? 'items-center'}`}
                 >
                   <span
                     className={`shrink-0 bg-[#b8bec9] shadow-[inset_0_2px_0_rgb(255_255_255_/0.35)] ${thumbClass}`}
@@ -123,6 +124,10 @@ export function TemplatePicker({ onSelect }) {
           </section>
         </div>
       </main>
+
+      <footer className="shrink-0 border-t border-[#e8eaef] bg-white px-6 py-4 text-center text-xs text-[#8b919c]">
+        Digital L&amp;D Center SeungHoonLee.
+      </footer>
     </div>
   )
 }

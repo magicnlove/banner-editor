@@ -66,7 +66,6 @@ export function FabricWorkspace({
   const appliedCanvasSizeRef = useRef(null)
 
   const [zoomPct, setZoomPct] = useState(100)
-  const [scrollSizer, setScrollSizer] = useState({ innerW: 0, innerH: 0 })
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const { registerCanvas, setSelected, bump, registerFitToScreen, runWithoutDirty } =
@@ -89,13 +88,11 @@ export function FabricWorkspace({
       )
       const innerEl = innerSizerRef.current
       if (innerEl) {
+        // 스크롤 영역만 — <canvas> 크기는 Fabric setDimensions 전용
         innerEl.style.width = `${innerW}px`
         innerEl.style.height = `${innerH}px`
       }
       scrollSizerRef.current = { innerW, innerH }
-      setScrollSizer((prev) =>
-        prev.innerW === innerW && prev.innerH === innerH ? prev : { innerW, innerH },
-      )
       return { innerW, innerH, vw, vh }
     },
     [width, height],
@@ -218,6 +215,12 @@ export function FabricWorkspace({
         height: h,
         backgroundColor: '#ffffff',
         preserveObjectStacking: true,
+      })
+      console.log('[canvas.setDimensions]', 'FabricWorkspace.jsx:new Canvas (constructor)', {
+        width: w,
+        height: h,
+        afterGetWidth: inst.getWidth(),
+        afterGetHeight: inst.getHeight(),
       })
       fabricRef.current = inst
 
@@ -502,14 +505,9 @@ export function FabricWorkspace({
       >
         <div
           ref={innerSizerRef}
-          className="box-border flex items-center justify-center"
-          style={{
-            width:
-              scrollSizer.innerW > 0 ? `${scrollSizer.innerW}px` : '100%',
-            height:
-              scrollSizer.innerH > 0 ? `${scrollSizer.innerH}px` : '100%',
-          }}
+          className="box-border flex h-fit w-fit items-center justify-center"
         >
+          {/* 크기는 Fabric setDimensions만 사용 (style/height 속성 없음) */}
           <canvas ref={hostRef} className="block shrink-0" />
         </div>
       </div>

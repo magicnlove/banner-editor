@@ -20,9 +20,11 @@ import { setObjectScaledSizeCentered } from '../lib/fabricPlacement'
 import { getLineLengthPx, setLineLengthPx } from '../lib/fabricTools'
 import {
   cmInputToPx,
+  cmInputToPxFloat,
   cmToPx,
   formatCmFromPx,
 } from '../lib/units'
+import { BUNDLED_FONT_FAMILY_NAMES } from '../lib/bundledFonts'
 
 const PRESETS = [
   '#FF6600',
@@ -39,6 +41,7 @@ const PRESETS = [
 
 const BASE_FONTS = [
   'Noto Sans KR',
+  ...BUNDLED_FONT_FAMILY_NAMES,
   'Nanum Gothic',
   'Malgun Gothic',
   'Apple SD Gothic Neo',
@@ -53,9 +56,16 @@ const OBJECT_SIZE_MIN = Math.round(cmToPx(0.1))
 const OBJECT_SIZE_MAX = 8000
 const LINE_LENGTH_MIN = Math.round(cmToPx(0.5))
 const LINE_LENGTH_MAX = 8000
+const LINE_STROKE_MIN_CM = 0.01
+const LINE_STROKE_MIN_PX = cmToPx(LINE_STROKE_MIN_CM)
+const LINE_STROKE_MAX_PX = cmToPx(5)
 
 function clampLineLen(px) {
   return Math.min(LINE_LENGTH_MAX, Math.max(LINE_LENGTH_MIN, px))
+}
+
+function clampLineStroke(px) {
+  return Math.min(LINE_STROKE_MAX_PX, Math.max(LINE_STROKE_MIN_PX, px))
 }
 
 function fabricObjectKey(obj) {
@@ -463,13 +473,13 @@ export function PropertiesPanel({
                   두께 (cm)
                   <input
                     type="number"
-                    min={0.05}
+                    min={LINE_STROKE_MIN_CM}
                     max={5}
-                    step={0.05}
-                    value={formatCmFromPx(selected.strokeWidth ?? 2)}
+                    step={0.01}
+                    value={formatCmFromPx(selected.strokeWidth ?? 2, 2)}
                     onChange={(e) => {
-                      const px = cmInputToPx(e.target.value)
-                      if (px != null) applyToSelection({ strokeWidth: Math.max(1, px) })
+                      const px = cmInputToPxFloat(e.target.value)
+                      if (px != null) applyToSelection({ strokeWidth: clampLineStroke(px) })
                     }}
                     className="mt-1 w-full rounded-xl border border-[#e8eaef] px-2 py-2 text-sm"
                   />

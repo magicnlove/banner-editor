@@ -4,6 +4,7 @@
 
 import notoSansKrRegularWoff2 from '../assets/fonts/NotoSansKR-Regular.woff2?url'
 import notoSansKrSemiBoldWoff2 from '../assets/fonts/NotoSansKR-SemiBold.woff2?url'
+import { BUNDLED_FONT_URL_BY_FAMILY } from './bundledFonts'
 import { loadCanvasTextFontsAndRender } from './appFonts'
 
 /**
@@ -164,6 +165,19 @@ async function loadWoff2Binary(resolved, family, cssWeight = 400) {
 }
 
 /**
+ * @param {string} resolved
+ * @param {string} family
+ */
+async function loadBundledTtfBinary(resolved, family) {
+  const assetUrl =
+    BUNDLED_FONT_URL_BY_FAMILY[resolved] ?? BUNDLED_FONT_URL_BY_FAMILY[family]
+  if (!assetUrl) return null
+
+  const base64 = await fetchBundledAssetAsBase64(assetUrl)
+  return { binary: base64ToBinaryString(base64), format: 'truetype' }
+}
+
+/**
  * @param {string} family
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} customFonts
  * @param {{ cssWeight?: number }} [options]
@@ -188,7 +202,11 @@ export async function loadFontBinaryForExport(
     }
   }
 
-  return null
+  try {
+    return await loadBundledTtfBinary(resolved, family)
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -526,6 +544,11 @@ export async function loadPdfFontBinaries(family, customFonts = []) {
     }
   }
 
+  const bundled = await loadBundledTtfBinary(resolved, family)
+  if (bundled) {
+    return { regular: bundled.binary, bold: bundled.binary }
+  }
+
   const custom = loadCustomFontBinary(family, resolved, customFonts)
   if (!custom) return null
   return { regular: custom.binary, bold: custom.binary }
@@ -590,7 +613,7 @@ export function buildPdfFontFaceCss(fonts) {
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
  * @returns {Promise<PdfFontPayload[]>}
  */
-export async function collectPdfFontsForExport(_canvas, customFonts = []) {
+export async function collectPdfFontsForExport(canvas, customFonts = []) {
   const { regular, semiBold } = await loadLocalNotoSansKrWoff2Base64()
 
   /** @type {PdfFontPayload[]} */
@@ -609,12 +632,47 @@ export async function collectPdfFontsForExport(_canvas, customFonts = []) {
     },
   ]
 
+  const embeddedFamilies = new Set(['Noto Sans KR'])
+  const families = canvas ? collectFontFamiliesFromCanvas(canvas) : []
+
+  for (const fam of families) {
+    const resolved = resolveExportFontFamily(fam)
+    if (embeddedFamilies.has(resolved)) continue
+
+    const loaded = await loadFontBinaryForExport(fam, customFonts)
+    if (!loaded) continue
+
+    const base64 = binaryToBase64(loaded.binary)
+    embeddedFamilies.add(resolved)
+    fonts.push({
+      family: resolved,
+      weight: 'normal',
+      base64,
+      format: loaded.format,
+    })
+    fonts.push({
+      family: resolved,
+      weight: 'bold',
+      base64,
+      format: loaded.format,
+    })
+  }
+
   for (const entry of customFonts) {
     if (!entry?.family || !entry?.fileData) continue
+    if (embeddedFamilies.has(entry.family)) continue
+    embeddedFamilies.add(entry.family)
+    const base64 = arrayBufferToBase64(entry.fileData)
     fonts.push({
       family: entry.family,
       weight: 'normal',
-      base64: arrayBufferToBase64(entry.fileData),
+      base64,
+      format: 'truetype',
+    })
+    fonts.push({
+      family: entry.family,
+      weight: 'bold',
+      base64,
       format: 'truetype',
     })
   }

@@ -1,4 +1,4 @@
-import { getLogicalSizeFromCanvas } from './template'
+import { getLogicalSizeFromCanvas, setCanvasDimensionsWithLog } from './template'
 
 /**
  * 화면 줌: __logicalSize는 고정, setZoom + DOM = 논리×줌
@@ -27,10 +27,12 @@ export function applyDisplayZoom(canvas, zoom) {
   const { width: logicalW, height: logicalH } = getLogicalSizeFromCanvas(canvas)
 
   canvas.setZoom(z)
-  canvas.setDimensions({
-    width: Math.round(logicalW * z),
-    height: Math.round(logicalH * z),
-  })
+  setCanvasDimensionsWithLog(
+    canvas,
+    Math.round(logicalW * z),
+    Math.round(logicalH * z),
+    'canvasZoom.js:applyDisplayZoom',
+  )
   canvas.calcOffset()
   canvas.requestRenderAll()
   return z
@@ -183,7 +185,12 @@ export function prepareCanvasForExport(canvas) {
 /** @param {import('fabric').Canvas} canvas @param {ReturnType<typeof prepareCanvasForExport>} saved */
 export function restoreCanvasAfterExport(canvas, saved) {
   canvas.setZoom(saved.savedZoom)
-  canvas.setDimensions({ width: saved.savedWidth, height: saved.savedHeight })
+  setCanvasDimensionsWithLog(
+    canvas,
+    saved.savedWidth,
+    saved.savedHeight,
+    'canvasZoom.js:restoreCanvasAfterExport',
+  )
   canvas.setViewportTransform(saved.savedVp)
   canvas.calcOffset()
   canvas.requestRenderAll()
@@ -193,7 +200,12 @@ export function restoreCanvasAfterExport(canvas, saved) {
 export function resetCanvasToLogicalForExport(canvas) {
   const { width, height } = getLogicalSizeFromCanvas(canvas)
   canvas.setZoom(1)
-  canvas.setDimensions({ width, height })
+  setCanvasDimensionsWithLog(
+    canvas,
+    width,
+    height,
+    'canvasZoom.js:resetCanvasToLogicalForExport',
+  )
   canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
   canvas.calcOffset()
   canvas.requestRenderAll()

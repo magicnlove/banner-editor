@@ -32,6 +32,7 @@ import {
 } from '../lib/workState'
 import { confirmLeaveIfDirty } from '../lib/leaveGuard'
 import { loadCanvasTextFontsAndRender } from '../lib/appFonts'
+import { ExportLoadingOverlay } from './ExportLoadingOverlay'
 import logo from '../assets/logo.png'
 
 function downloadBlob(blob, filename) {
@@ -74,6 +75,7 @@ export function EditorHeader({
     fitToScreen,
   } = useEditor()
   const [open, setOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const menuRef = useRef(null)
   const loadInputRef = useRef(null)
 
@@ -147,7 +149,14 @@ export function EditorHeader({
 
   const runExport = useCallback(
     async (kind) => {
-      if (!canvas) return
+      if (!canvas || exporting) return
+
+      const isRasterOrVectorExport =
+        kind === 'pdf' || kind === 'svg' || kind === 'png' || kind === 'jpg'
+      if (isRasterOrVectorExport) {
+        setExporting(true)
+        setOpen(false)
+      }
 
       const prev = canvas.getActiveObject()
       canvas.discardActiveObject()
@@ -172,7 +181,12 @@ export function EditorHeader({
             )
           }
         } else if (kind === 'svg') {
-          const inner = await exportFabricToSvg(canvas, customFonts, logical)
+          const inner = await exportFabricToSvg(
+            canvas,
+            customFonts,
+            logical,
+            { notoOnly: false },
+          )
           const full = `<?xml version="1.0" encoding="UTF-8"?>\n${inner}`
           downloadBlob(
             new Blob([full], { type: 'image/svg+xml;charset=utf-8' }),
@@ -205,18 +219,24 @@ export function EditorHeader({
         if (prev) canvas.setActiveObject(prev)
         canvas.requestRenderAll()
         setOpen(false)
+        if (isRasterOrVectorExport) setExporting(false)
       }
     },
-    [canvas, customFonts, editorConfig],
+    [canvas, customFonts, editorConfig, exporting],
   )
 
+  const uiLocked = exporting
+
   return (
+    <>
+    <ExportLoadingOverlay visible={exporting} />
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#e8eaef] bg-white px-4 shadow-sm">
       <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
           onClick={handleHome}
-          className="rounded-xl p-2 text-[#5c6370] hover:bg-[#f0f2f6]"
+          disabled={uiLocked}
+          className="rounded-xl p-2 text-[#5c6370] hover:bg-[#f0f2f6] disabled:pointer-events-none disabled:opacity-50"
           title="템플릿 선택"
         >
           <Home className="h-5 w-5" />
@@ -242,7 +262,8 @@ export function EditorHeader({
         <button
           type="button"
           onClick={() => loadInputRef.current?.click()}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[#e8eaef] bg-white px-3 py-2 text-sm font-medium text-[#1a1d24] hover:bg-[#f8f9fb]"
+          disabled={uiLocked}
+          className="inline-flex items-center gap-1.5 rounded-full border border-[#e8eaef] bg-white px-3 py-2 text-sm font-medium text-[#1a1d24] hover:bg-[#f8f9fb] disabled:pointer-events-none disabled:opacity-50"
           title="작업 불러오기"
         >
           <Upload className="h-4 w-4" />
@@ -251,7 +272,8 @@ export function EditorHeader({
         <button
           type="button"
           onClick={handleSave}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[#e8eaef] bg-white px-3 py-2 text-sm font-medium text-[#1a1d24] hover:bg-[#f8f9fb]"
+          disabled={uiLocked}
+          className="inline-flex items-center gap-1.5 rounded-full border border-[#e8eaef] bg-white px-3 py-2 text-sm font-medium text-[#1a1d24] hover:bg-[#f8f9fb] disabled:pointer-events-none disabled:opacity-50"
           title="작업 저장"
         >
           <Save className="h-4 w-4" />
@@ -262,7 +284,8 @@ export function EditorHeader({
           <button
             type="button"
             onClick={() => setOpen((o) => !o)}
-            className="inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110"
+            disabled={uiLocked}
+            className="inline-flex items-center gap-2 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-110 disabled:pointer-events-none disabled:opacity-50"
           >
             <Download className="h-4 w-4" />
             보내기
@@ -272,7 +295,8 @@ export function EditorHeader({
             <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-[#e8eaef] bg-white py-1 shadow-lg">
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[#f8f9fb]"
+                disabled={uiLocked}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[#f8f9fb] disabled:pointer-events-none disabled:opacity-50"
                 onClick={() => void runExport('pdf')}
               >
                 <FileText className="h-4 w-4 shrink-0 text-[#64748b]" />
@@ -283,7 +307,8 @@ export function EditorHeader({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[#f8f9fb]"
+                disabled={uiLocked}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[#f8f9fb] disabled:pointer-events-none disabled:opacity-50"
                 onClick={() => void runExport('svg')}
               >
                 <FileType className="h-4 w-4 text-[#64748b]" />
@@ -291,7 +316,8 @@ export function EditorHeader({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[#f8f9fb]"
+                disabled={uiLocked}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[#f8f9fb] disabled:pointer-events-none disabled:opacity-50"
                 onClick={() => void runExport('png')}
               >
                 <FileImage className="h-4 w-4 text-[#64748b]" />
@@ -299,7 +325,8 @@ export function EditorHeader({
               </button>
               <button
                 type="button"
-                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[#f8f9fb]"
+                disabled={uiLocked}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[#f8f9fb] disabled:pointer-events-none disabled:opacity-50"
                 onClick={() => void runExport('jpg')}
               >
                 <FileImage className="h-4 w-4 text-[#64748b]" />
@@ -322,5 +349,6 @@ export function EditorHeader({
         </div>
       </div>
     </header>
+    </>
   )
 }

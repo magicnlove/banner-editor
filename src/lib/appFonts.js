@@ -1,3 +1,5 @@
+import { BUNDLED_FONT_FAMILY_NAMES } from './bundledFonts'
+
 /** 캔버스·UI 공통 한글 폰트 패밀리 */
 export const FONT_FAMILY_NOTO = 'Noto Sans KR'
 
@@ -6,10 +8,15 @@ export const FONT_FAMILY_NOTO = 'Noto Sans KR'
  */
 export async function ensureAppFontsReady() {
   await document.fonts.ready
-  await Promise.all([
+  const loads = [
     document.fonts.load(`400 16px "${FONT_FAMILY_NOTO}"`),
     document.fonts.load(`600 16px "${FONT_FAMILY_NOTO}"`),
-  ])
+    ...BUNDLED_FONT_FAMILY_NAMES.flatMap((family) => [
+      document.fonts.load(`400 16px "${family}"`),
+      document.fonts.load(`600 16px "${family}"`),
+    ]),
+  ]
+  await Promise.all(loads.map((p) => p.catch(() => {})))
   await document.fonts.ready
 }
 
