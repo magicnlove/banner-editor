@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "dev:api": "vercel dev",
+    "convert-fonts": "node scripts/convert-fonts.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },
@@ -33,6 +34,7 @@
     "gh-pages": "^6.3.0",
     "globals": "^17.6.0",
     "tailwindcss": "^4.3.0",
+    "ttf2woff2": "^8.0.1",
     "vite": "^8.0.12"
   }
 }

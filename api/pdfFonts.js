@@ -12,16 +12,16 @@ export const SERVER_FONT_CATALOG = {
     { file: 'NotoSansKR-SemiBold.woff2', format: 'woff2', weight: 'bold' },
   ],
   Hanwha: [
-    { file: 'HanwhaR.ttf', format: 'truetype', weight: 'normal' },
-    { file: 'HanwhaR.ttf', format: 'truetype', weight: 'bold' },
+    { file: 'HanwhaR.woff2', format: 'woff2', weight: 'normal' },
+    { file: 'HanwhaR.woff2', format: 'woff2', weight: 'bold' },
   ],
   'HGG Gothic 40': [
-    { file: 'HGGGothicssi_40g.ttf', format: 'truetype', weight: 'normal' },
-    { file: 'HGGGothicssi_40g.ttf', format: 'truetype', weight: 'bold' },
+    { file: 'HGGGothicssi_40g.woff2', format: 'woff2', weight: 'normal' },
+    { file: 'HGGGothicssi_40g.woff2', format: 'woff2', weight: 'bold' },
   ],
   'HGG Gothic 99': [
-    { file: 'HGGGothicssi_99g.ttf', format: 'truetype', weight: 'normal' },
-    { file: 'HGGGothicssi_99g.ttf', format: 'truetype', weight: 'bold' },
+    { file: 'HGGGothicssi_99g.woff2', format: 'woff2', weight: 'normal' },
+    { file: 'HGGGothicssi_99g.woff2', format: 'woff2', weight: 'bold' },
   ],
 }
 
