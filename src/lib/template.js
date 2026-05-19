@@ -63,7 +63,8 @@ export function preserveLogicalPx(value) {
 export function setCanvasLogicalSize(canvas, width, height, source = 'unknown') {
   const w = preserveLogicalPx(width)
   const h = preserveLogicalPx(height)
-  console.log('[logicalSize set DIRECT]', source, w, h, new Error().stack)
+  console.log('[logicalSize set DIRECT]', source, w, h)
+  console.trace(`[logicalSize set DIRECT trace] ${source}`)
   canvas.__logicalSize = { width: w, height: h }
 }
 
@@ -235,6 +236,42 @@ function alignTemplateGroupToViewBox(group, viewBox) {
 }
 
 /**
+ * 템플릿 그룹을 viewBox 안에 맞춤 (비율 유지, 더 작은 스케일 비율 적용)
+ * @param {import('fabric').FabricObject} group
+ * @param {{ minX: number; minY: number; width: number; height: number }} viewBox
+ * @returns {number} 적용된 uniform scale
+ */
+function fitTemplateGroupToViewBox(group, viewBox) {
+  group.set({ originX: 'left', originY: 'top' })
+  group.setCoords()
+  const br = group.getBoundingRect(true, true)
+  if (!(br.width > 0 && br.height > 0)) {
+    alignTemplateGroupToViewBox(group, viewBox)
+    return 1
+  }
+
+  const scaleW = viewBox.width / br.width
+  const scaleH = viewBox.height / br.height
+  const scale = Math.min(scaleW, scaleH)
+
+  if (Math.abs(scale - 1) > 1e-6) {
+    if (scaleW <= scaleH && typeof group.scaleToWidth === 'function') {
+      group.scaleToWidth(viewBox.width)
+    } else if (typeof group.scaleToHeight === 'function') {
+      group.scaleToHeight(viewBox.height)
+    } else {
+      const sx = group.scaleX ?? 1
+      const sy = group.scaleY ?? 1
+      group.set({ scaleX: sx * scale, scaleY: sy * scale })
+    }
+    group.setCoords()
+  }
+
+  alignTemplateGroupToViewBox(group, viewBox)
+  return scale
+}
+
+/**
  * 템플릿 논리 크기 = viewBox 소수값 그대로 (반올림 없음)
  * @param {{ width: number; height: number }} viewBox
  */
@@ -308,7 +345,7 @@ export function syncCanvasToTemplateBounds(canvas) {
   const viewBox = canvas.__viewBox
   if (!template || !viewBox) return null
 
-  alignTemplateGroupToViewBox(template, viewBox)
+  fitTemplateGroupToViewBox(template, viewBox)
   const logical = logicalSizeFromViewBox(viewBox)
   applyTemplateCanvasDimensions(canvas, logical.width, logical.height, viewBox)
   return measureTemplateLogicalSize(template, viewBox)
@@ -350,7 +387,8 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   canvas.backgroundColor = '#ffffff'
 
   canvas.add(grouped)
-  alignTemplateGroupToViewBox(grouped, viewBox)
+  const fitScale = fitTemplateGroupToViewBox(grouped, viewBox)
+  console.log('[template fit scale]', fitScale, 'viewBox', viewBox.width, viewBox.height)
   canvas.sendObjectToBack(grouped)
 
   const { width, height } = logicalSizeFromViewBox(viewBox)
