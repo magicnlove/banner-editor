@@ -74,6 +74,10 @@ export function setCanvasLogicalSize(canvas, width, height, source = 'unknown') 
  * @param {string} [source]
  */
 export function ensureCanvasLogicalSizeFromViewBox(canvas, source = 'ensure') {
+  // 템플릿: 논리 크기는 getBoundingRect 기준 — viewBox로 덮어쓰지 않음
+  if (canvas.getObjects?.().some((o) => isTemplateLayerObject(o))) {
+    return
+  }
   const vb = canvas.__viewBox
   if (!(vb?.width > 0 && vb?.height > 0)) return
   const w = preserveLogicalPx(vb.width)
@@ -182,17 +186,16 @@ export function resizeCanvasLogicalSize(canvas, newWidth, newHeight) {
 
 /** @param {import('fabric').Canvas} canvas */
 export function getLogicalSizeFromCanvas(canvas) {
-  // 템플릿: viewBox가 단일 진실 소스 (HTML 캔버스 정수화·반올림과 분리)
-  if (canvas.__viewBox?.width > 0 && canvas.__viewBox?.height > 0) {
-    return {
-      width: Number(canvas.__viewBox.width),
-      height: Number(canvas.__viewBox.height),
-    }
-  }
   if (canvas.__logicalSize?.width > 0 && canvas.__logicalSize?.height > 0) {
     return {
       width: Number(canvas.__logicalSize.width),
       height: Number(canvas.__logicalSize.height),
+    }
+  }
+  if (canvas.__viewBox?.width > 0 && canvas.__viewBox?.height > 0) {
+    return {
+      width: Number(canvas.__viewBox.width),
+      height: Number(canvas.__viewBox.height),
     }
   }
   const z = canvas.getZoom() || 1
@@ -236,42 +239,6 @@ function alignTemplateGroupToViewBox(group, viewBox) {
 }
 
 /**
- * 템플릿 그룹을 viewBox 안에 맞춤 (비율 유지, 더 작은 스케일 비율 적용)
- * @param {import('fabric').FabricObject} group
- * @param {{ minX: number; minY: number; width: number; height: number }} viewBox
- * @returns {number} 적용된 uniform scale
- */
-function fitTemplateGroupToViewBox(group, viewBox) {
-  group.set({ originX: 'left', originY: 'top' })
-  group.setCoords()
-  const br = group.getBoundingRect(true, true)
-  if (!(br.width > 0 && br.height > 0)) {
-    alignTemplateGroupToViewBox(group, viewBox)
-    return 1
-  }
-
-  const scaleW = viewBox.width / br.width
-  const scaleH = viewBox.height / br.height
-  const scale = Math.min(scaleW, scaleH)
-
-  if (Math.abs(scale - 1) > 1e-6) {
-    if (scaleW <= scaleH && typeof group.scaleToWidth === 'function') {
-      group.scaleToWidth(viewBox.width)
-    } else if (typeof group.scaleToHeight === 'function') {
-      group.scaleToHeight(viewBox.height)
-    } else {
-      const sx = group.scaleX ?? 1
-      const sy = group.scaleY ?? 1
-      group.set({ scaleX: sx * scale, scaleY: sy * scale })
-    }
-    group.setCoords()
-  }
-
-  alignTemplateGroupToViewBox(group, viewBox)
-  return scale
-}
-
-/**
  * 템플릿 논리 크기 = viewBox 소수값 그대로 (반올림 없음)
  * @param {{ width: number; height: number }} viewBox
  */
@@ -282,11 +249,36 @@ export function logicalSizeFromViewBox(viewBox) {
   }
 }
 
-/** @param {import('fabric').FabricObject} group @param {{ width: number; height: number }} viewBox */
-export function measureTemplateLogicalSize(group, viewBox) {
+/** @param {import('fabric').FabricObject} group */
+export function logicalSizeFromTemplateGroup(group) {
   group.setCoords()
-  const boundingRect = group.getBoundingRect(true, true)
-  return { ...logicalSizeFromViewBox(viewBox), boundingRect }
+  const br = group.getBoundingRect(true, true)
+  return {
+    width: preserveLogicalPx(br.width),
+    height: preserveLogicalPx(br.height),
+    boundingRect: br,
+  }
+}
+
+/** @param {import('fabric').FabricObject} group @param {{ width: number; height: number }} [viewBox] */
+export function measureTemplateLogicalSize(group, viewBox) {
+  return { ...logicalSizeFromTemplateGroup(group), viewBox }
+}
+
+/**
+ * 정렬만 viewBox 기준, 캔버스·__logicalSize는 템플릿 getBoundingRect() 크기
+ * @param {import('fabric').Canvas} canvas
+ * @param {import('fabric').FabricObject} group
+ * @param {{ minX: number; minY: number; width: number; height: number }} svgViewBox
+ */
+function applyCanvasDimensionsToTemplateBounds(canvas, group, svgViewBox) {
+  alignTemplateGroupToViewBox(group, svgViewBox)
+  const { width, height } = logicalSizeFromTemplateGroup(group)
+  canvas.__viewBox = cloneViewBox(svgViewBox)
+  const z = canvas.getZoom() || 1
+  setCanvasLogicalDimensions(canvas, width, height, 'templateBounds', { zoom: z })
+  canvas.calcOffset()
+  return measureTemplateLogicalSize(group, svgViewBox)
 }
 
 /**
@@ -342,13 +334,12 @@ export function applyTemplateCanvasDimensions(canvas, width, height, viewBox) {
 /** @param {import('fabric').Canvas} canvas */
 export function syncCanvasToTemplateBounds(canvas) {
   const template = canvas.getObjects().find((o) => isTemplateLayerObject(o))
-  const viewBox = canvas.__viewBox
-  if (!template || !viewBox) return null
-
-  fitTemplateGroupToViewBox(template, viewBox)
-  const logical = logicalSizeFromViewBox(viewBox)
-  applyTemplateCanvasDimensions(canvas, logical.width, logical.height, viewBox)
-  return measureTemplateLogicalSize(template, viewBox)
+  if (!template) return null
+  const svgViewBox = canvas.__viewBox
+  if (!(svgViewBox?.width > 0 && svgViewBox?.height > 0)) {
+    return null
+  }
+  return applyCanvasDimensionsToTemplateBounds(canvas, template, svgViewBox)
 }
 
 /**
@@ -387,13 +378,10 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   canvas.backgroundColor = '#ffffff'
 
   canvas.add(grouped)
-  const fitScale = fitTemplateGroupToViewBox(grouped, viewBox)
-  console.log('[template fit scale]', fitScale, 'viewBox', viewBox.width, viewBox.height)
   canvas.sendObjectToBack(grouped)
 
-  const { width, height } = logicalSizeFromViewBox(viewBox)
-  applyTemplateCanvasDimensions(canvas, width, height, viewBox)
-  const measured = measureTemplateLogicalSize(grouped, viewBox)
+  const measured = applyCanvasDimensionsToTemplateBounds(canvas, grouped, viewBox)
+  const { width, height } = measured
   logTemplateCanvasMetrics(canvas, grouped, 'after loadTemplateOntoCanvas')
 
   canvas.requestRenderAll()

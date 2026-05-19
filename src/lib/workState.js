@@ -1,10 +1,12 @@
 import {
   TEMPLATE_LAYER_PROP,
   applyTemplateCanvasDimensions,
+  cloneViewBox,
   getLogicalSizeFromCanvas,
   getTemplate,
   isTemplateLayerObject,
   parseViewBoxFromSvgString,
+  syncCanvasToTemplateBounds,
 } from './template'
 
 export const WORK_STATE_VERSION = 1
@@ -139,19 +141,6 @@ export function loadWorkStateOntoCanvas(canvas, data) {
       ? /** @type {import('../lib/template').EditorConfig} */ (payload.editorConfig)
       : null
 
-  if (editorConfig?.type === 'template' && editorConfig.templateKey) {
-    try {
-      const template = getTemplate(editorConfig.templateKey)
-      const vb = template.raw ? parseViewBoxFromSvgString(template.raw) : null
-      if (vb) {
-        width = vb.width
-        height = vb.height
-      }
-    } catch {
-      /* 템플릿 viewBox 복원 실패 시 저장값 사용 */
-    }
-  }
-
   return new Promise((resolve, reject) => {
     canvas.loadFromJSON(fabric, () => {
       try {
@@ -163,14 +152,30 @@ export function loadWorkStateOntoCanvas(canvas, data) {
             : { minX: 0, minY: 0, width, height }
 
         canvas.setZoom(1)
-        applyTemplateCanvasDimensions(canvas, width, height, viewBox)
         reapplyTemplateLayerMarkers(canvas)
+
+        if (editorConfig?.type === 'template' && editorConfig.templateKey) {
+          try {
+            const template = getTemplate(editorConfig.templateKey)
+            const vb = template.raw ? parseViewBoxFromSvgString(template.raw) : null
+            if (vb) {
+              canvas.__viewBox = cloneViewBox(vb)
+            }
+          } catch {
+            canvas.__viewBox = cloneViewBox(viewBox)
+          }
+          syncCanvasToTemplateBounds(canvas)
+        } else {
+          applyTemplateCanvasDimensions(canvas, width, height, viewBox)
+        }
+
+        const logicalSize = getLogicalSizeFromCanvas(canvas)
         canvas.discardActiveObject()
         canvas.calcOffset()
         canvas.requestRenderAll()
 
         resolve({
-          logicalSize: { width, height },
+          logicalSize,
           editorConfig,
           workName: String(payload.workName || ''),
         })
