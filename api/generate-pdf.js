@@ -46,14 +46,22 @@ export default async function handler(req, res) {
       preferCSSPageSize: true,
     })
 
+    console.log('PDF generated, size:', pdf.length)
+
     await browser.close()
     browser = undefined
 
+    const pdfBuffer = Buffer.from(pdf)
+    console.log('Buffer size:', pdfBuffer.length)
+
+    res.statusCode = 200
     res.setHeader('Content-Type', 'application/pdf')
     res.setHeader('Content-Disposition', 'attachment; filename=banner.pdf')
-    return res.status(200).send(pdf)
-  } catch (err) {
-    console.error('[generate-pdf]', err)
+    res.setHeader('Content-Length', pdfBuffer.length)
+    res.end(pdfBuffer)
+    return
+  } catch (error) {
+    console.error('PDF generation error:', error)
     if (browser) {
       try {
         await browser.close()
@@ -62,8 +70,7 @@ export default async function handler(req, res) {
       }
     }
     return res.status(500).json({
-      error: 'PDF generation failed',
-      message: err instanceof Error ? err.message : String(err),
+      error: error instanceof Error ? error.message : String(error),
     })
   }
 }
