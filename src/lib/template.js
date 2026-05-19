@@ -138,7 +138,15 @@ export function setCanvasLogicalDimensions(canvas, width, height, source = 'unkn
   }
   const dw = w * z
   const dh = h * z
-  console.log('[setDimensions]', source, dw, dh, `(logical ${w}×${h} @zoom ${z})`)
+  console.log('[setDimensions]', source, {
+    width: dw,
+    height: dh,
+    zoom: z,
+    logicalW: w,
+    logicalH: h,
+    __viewBox: canvas.__viewBox,
+    __logicalSize: canvas.__logicalSize,
+  })
   canvas.setDimensions({ width: dw, height: dh })
   ensureCanvasLogicalSizeFromViewBox(canvas, `${source}:afterSetDimensions`)
 }
@@ -218,19 +226,30 @@ export function resizeCanvasLogicalSize(canvas, newWidth, newHeight) {
   return { scaleX, scaleY, oldWidth: oldW, oldHeight: oldH, newWidth: nw, newHeight: nh }
 }
 
-/** @param {import('fabric').Canvas} canvas */
-export function getLogicalSizeFromCanvas(canvas) {
-  if (canvas.__logicalSize?.width > 0 && canvas.__logicalSize?.height > 0) {
+/**
+ * 문서 논리 크기 — 템플릿은 __viewBox 우선 (오래된 __logicalSize/buffer 오염 방지)
+ * @param {import('fabric').Canvas} canvas
+ * @param {{ width?: number; height?: number }} [fallback]
+ */
+export function getLogicalSizeFromCanvas(canvas, fallback) {
+  const vb = canvas.__viewBox
+  if (vb?.width > 0 && vb?.height > 0) {
     return {
-      width: Number(canvas.__logicalSize.width),
-      height: Number(canvas.__logicalSize.height),
+      width: Number(vb.width),
+      height: Number(vb.height),
     }
   }
-  if (canvas.__viewBox?.width > 0 && canvas.__viewBox?.height > 0) {
+  const ls = canvas.__logicalSize
+  if (ls?.width > 0 && ls?.height > 0) {
     return {
-      width: Number(canvas.__viewBox.width),
-      height: Number(canvas.__viewBox.height),
+      width: Number(ls.width),
+      height: Number(ls.height),
     }
+  }
+  const fw = Number(fallback?.width)
+  const fh = Number(fallback?.height)
+  if (fw > 0 && fh > 0) {
+    return { width: fw, height: fh }
   }
   const z = canvas.getZoom() || 1
   return {
@@ -344,7 +363,11 @@ function applyCanvasDimensionsToTemplateBounds(canvas, group, svgViewBox) {
   const z = canvas.getZoom() || 1
   setCanvasLogicalDimensions(canvas, width, height, 'templateBounds', { zoom: z })
   canvas.calcOffset()
-  return measureTemplateLogicalSize(group, viewBox)
+  return {
+    ...measureTemplateLogicalSize(group, viewBox),
+    width,
+    height,
+  }
 }
 
 /**
@@ -448,7 +471,7 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   canvas.sendObjectToBack(grouped)
 
   const measured = applyCanvasDimensionsToTemplateBounds(canvas, grouped, viewBox)
-  const { width, height } = measured
+  const { width, height } = logicalSizeFromViewBox(viewBox)
   logTemplateCanvasMetrics(canvas, grouped, 'after loadTemplateOntoCanvas')
 
   canvas.requestRenderAll()

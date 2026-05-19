@@ -1,7 +1,7 @@
-import { ensureCanvasLogicalSizeFromViewBox } from './template'
+import { ensureCanvasLogicalSizeFromViewBox, getLogicalSizeFromCanvas } from './template'
 
 /**
- * 줌: canvas.setZoom + setDimensions(논리×줌). __logicalSize는 항상 원본 템플릿 크기.
+ * 줌: canvas.setZoom + setDimensions(논리×줌). 논리 크기는 __viewBox → __logicalSize 순.
  */
 export const ZOOM_MIN = 0.1
 export const ZOOM_MAX = 3
@@ -12,25 +12,9 @@ export function clampZoom(z) {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z))
 }
 
-/** @param {import('fabric').Canvas} canvas */
-export function getCanvasLogicalSize(canvas) {
-  if (canvas.__logicalSize?.width > 0 && canvas.__logicalSize?.height > 0) {
-    return {
-      width: Number(canvas.__logicalSize.width),
-      height: Number(canvas.__logicalSize.height),
-    }
-  }
-  if (canvas.__viewBox?.width > 0 && canvas.__viewBox?.height > 0) {
-    return {
-      width: Number(canvas.__viewBox.width),
-      height: Number(canvas.__viewBox.height),
-    }
-  }
-  const z = clampZoom(canvas.getZoom() || 1)
-  return {
-    width: canvas.getWidth() / z,
-    height: canvas.getHeight() / z,
-  }
+/** @param {import('fabric').Canvas} canvas @param {{ width?: number; height?: number }} [fallback] */
+export function getCanvasLogicalSize(canvas, fallback) {
+  return getLogicalSizeFromCanvas(canvas, fallback)
 }
 
 /**
@@ -39,17 +23,24 @@ export function getCanvasLogicalSize(canvas) {
  */
 export function applyDisplayZoom(canvas, logicalW, logicalH, zoom) {
   const z = clampZoom(zoom)
-  const logical = canvas.__logicalSize ?? { width: logicalW, height: logicalH }
+  const logical = getLogicalSizeFromCanvas(canvas, {
+    width: logicalW,
+    height: logicalH,
+  })
   canvas.setZoom(z)
   const dw = logical.width * z
   const dh = logical.height * z
-  console.log(
-    '[setDimensions]',
-    'applyDisplayZoom',
-    dw,
-    dh,
-    `(logical ${logical.width}×${logical.height} @zoom ${z})`,
-  )
+  console.log('[setDimensions]', 'applyDisplayZoom', {
+    width: dw,
+    height: dh,
+    zoom: z,
+    logicalW: logical.width,
+    logicalH: logical.height,
+    passedW: logicalW,
+    passedH: logicalH,
+    __viewBox: canvas.__viewBox,
+    __logicalSize: canvas.__logicalSize,
+  })
   canvas.setDimensions({
     width: dw,
     height: dh,
@@ -207,6 +198,13 @@ export function prepareCanvasForExport(canvas) {
 
 export function restoreCanvasAfterExport(canvas, saved) {
   canvas.setZoom(saved.savedZoom)
+  console.log('[setDimensions]', 'restoreCanvasAfterExport', {
+    width: saved.savedWidth,
+    height: saved.savedHeight,
+    zoom: saved.savedZoom,
+    __viewBox: canvas.__viewBox,
+    __logicalSize: canvas.__logicalSize,
+  })
   canvas.setDimensions({ width: saved.savedWidth, height: saved.savedHeight })
   canvas.setViewportTransform(saved.savedVp)
   canvas.calcOffset()
@@ -214,9 +212,21 @@ export function restoreCanvasAfterExport(canvas, saved) {
 }
 
 export function resetCanvasToLogicalForExport(canvas, logicalW, logicalH) {
+  const logical = getLogicalSizeFromCanvas(canvas, {
+    width: logicalW,
+    height: logicalH,
+  })
   canvas.setZoom(1)
-  console.log('[setDimensions]', 'resetCanvasToLogicalForExport', logicalW, logicalH)
-  canvas.setDimensions({ width: logicalW, height: logicalH })
+  console.log('[setDimensions]', 'resetCanvasToLogicalForExport', {
+    width: logical.width,
+    height: logical.height,
+    zoom: 1,
+    passedW: logicalW,
+    passedH: logicalH,
+    __viewBox: canvas.__viewBox,
+    __logicalSize: canvas.__logicalSize,
+  })
+  canvas.setDimensions({ width: logical.width, height: logical.height })
   ensureCanvasLogicalSizeFromViewBox(canvas, 'resetCanvasToLogicalForExport')
   canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
   canvas.calcOffset()
