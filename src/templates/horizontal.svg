@@ -11,7 +11,12 @@
 		.st4{clip-path:url(#SVGID_00000021824868744023201650000002021082026501673406_);fill-rule:evenodd;clip-rule:evenodd;fill:#EC6608;}
 	.st5{clip-path:url(#SVGID_00000141430772371158983930000016846752906953512069_);fill:#F49C56;}
 </style>
-<g>
+<defs>
+	<clipPath id="main-clip">
+		<rect x="0" y="0" width="1133.76" height="226.77"/>
+	</clipPath>
+</defs>
+<g clip-path="url(#main-clip)">
 	<rect x="0" y="0.18" class="st0" width="1133.76" height="226.77"/>
 	<path class="st1" d="M178.73 93.73c-1.2-11.91-14.75-21.66-30.27-21.79c-15.49-0.12-27.1,9.43-25.87,21.33
 		c1.22,11.9,14.78,21.68,30.27,21.8C168.37 115.2 179.96 105.63 178.73 93.73M127.44 90.73c-1.03-9.59,9.02-17.3,22.5-17.19

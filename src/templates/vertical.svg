@@ -11,7 +11,12 @@
 	.st3{clip-path:url(#SVGID_00000134232469392522435510000008935462739209289371_);fill:#F49C56;}
 	.st4{fill:#FFFFFF;}
 </style>
-<g>
+<defs>
+	<clipPath id="main-clip">
+		<rect x="0" y="0" width="170.08" height="510.24"/>
+	</clipPath>
+</defs>
+<g clip-path="url(#main-clip)">
 	<g>
 		<defs>
 			<rect id="SVGID_1_" x="0" y="0" width="170.08" height="510.24"/>
