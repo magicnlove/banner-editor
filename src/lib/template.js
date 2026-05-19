@@ -1,4 +1,4 @@
-import { loadSVGFromString, util } from 'fabric'
+import { loadSVGFromString, util, Rect } from 'fabric'
 import horizontalSvgUrl from '../templates/horizontal.svg?url'
 import horizontalSvgRaw from '../templates/horizontal.svg?raw'
 import verticalSvgUrl from '../templates/vertical.svg?url'
@@ -400,6 +400,15 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
 
   canvas.add(grouped)
   canvas.sendObjectToBack(grouped)
+
+  const { width, height } = getLogicalSizeFromCanvas(canvas)
+  canvas.clipPath = new Rect({
+    left: 0,
+    top: 0,
+    width,
+    height,
+    absolutePositioned: true,
+  })
 
   canvas.requestRenderAll()
 
