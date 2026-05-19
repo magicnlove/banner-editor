@@ -1,3 +1,5 @@
+import { ensureCanvasLogicalSizeFromViewBox } from './template'
+
 /**
  * 줌: canvas.setZoom + setDimensions(논리×줌). __logicalSize는 항상 원본 템플릿 크기.
  */
@@ -39,10 +41,20 @@ export function applyDisplayZoom(canvas, logicalW, logicalH, zoom) {
   const z = clampZoom(zoom)
   const logical = canvas.__logicalSize ?? { width: logicalW, height: logicalH }
   canvas.setZoom(z)
+  const dw = logical.width * z
+  const dh = logical.height * z
+  console.log(
+    '[setDimensions]',
+    'applyDisplayZoom',
+    dw,
+    dh,
+    `(logical ${logical.width}×${logical.height} @zoom ${z})`,
+  )
   canvas.setDimensions({
-    width: logical.width * z,
-    height: logical.height * z,
+    width: dw,
+    height: dh,
   })
+  ensureCanvasLogicalSizeFromViewBox(canvas, 'applyDisplayZoom')
   canvas.calcOffset()
   canvas.requestRenderAll()
   return z
@@ -203,7 +215,9 @@ export function restoreCanvasAfterExport(canvas, saved) {
 
 export function resetCanvasToLogicalForExport(canvas, logicalW, logicalH) {
   canvas.setZoom(1)
+  console.log('[setDimensions]', 'resetCanvasToLogicalForExport', logicalW, logicalH)
   canvas.setDimensions({ width: logicalW, height: logicalH })
+  ensureCanvasLogicalSizeFromViewBox(canvas, 'resetCanvasToLogicalForExport')
   canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
   canvas.calcOffset()
   canvas.requestRenderAll()

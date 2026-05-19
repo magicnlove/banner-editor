@@ -1,7 +1,10 @@
 import {
   TEMPLATE_LAYER_PROP,
+  applyTemplateCanvasDimensions,
   getLogicalSizeFromCanvas,
+  getTemplate,
   isTemplateLayerObject,
+  parseViewBoxFromSvgString,
 } from './template'
 
 export const WORK_STATE_VERSION = 1
@@ -110,7 +113,7 @@ export function loadWorkStateOntoCanvas(canvas, data) {
     payload.viewBox && typeof payload.viewBox === 'object'
       ? /** @type {{ width?: number; height?: number }} */ (payload.viewBox)
       : null
-  const width =
+  let width =
     Number(savedViewBox?.width) > 0
       ? Number(savedViewBox.width)
       : Number(logicalSize?.width) > 0
@@ -118,7 +121,7 @@ export function loadWorkStateOntoCanvas(canvas, data) {
         : Number(payload.width) > 0
           ? Number(payload.width)
           : null
-  const height =
+  let height =
     Number(savedViewBox?.height) > 0
       ? Number(savedViewBox.height)
       : Number(logicalSize?.height) > 0
@@ -136,18 +139,31 @@ export function loadWorkStateOntoCanvas(canvas, data) {
       ? /** @type {import('../lib/template').EditorConfig} */ (payload.editorConfig)
       : null
 
+  if (editorConfig?.type === 'template' && editorConfig.templateKey) {
+    try {
+      const template = getTemplate(editorConfig.templateKey)
+      const vb = template.raw ? parseViewBoxFromSvgString(template.raw) : null
+      if (vb) {
+        width = vb.width
+        height = vb.height
+      }
+    } catch {
+      /* 템플릿 viewBox 복원 실패 시 저장값 사용 */
+    }
+  }
+
   return new Promise((resolve, reject) => {
     canvas.loadFromJSON(fabric, () => {
       try {
-        canvas.__logicalSize = { width, height }
-        if (payload.viewBox && typeof payload.viewBox === 'object') {
-          canvas.__viewBox = { .../** @type {object} */ (payload.viewBox) }
-        } else {
-          canvas.__viewBox = { minX: 0, minY: 0, width, height }
-        }
+        const viewBox =
+          payload.viewBox && typeof payload.viewBox === 'object'
+            ? /** @type {{ minX?: number; minY?: number; width: number; height: number }} */ (
+                payload.viewBox
+              )
+            : { minX: 0, minY: 0, width, height }
 
         canvas.setZoom(1)
-        canvas.setDimensions({ width, height })
+        applyTemplateCanvasDimensions(canvas, width, height, viewBox)
         reapplyTemplateLayerMarkers(canvas)
         canvas.discardActiveObject()
         canvas.calcOffset()

@@ -47,13 +47,70 @@ export function parseViewBoxFromSvgString(svgRaw) {
   return { minX, minY, width, height }
 }
 
+/** @param {unknown} value */
+export function preserveLogicalPx(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n) || n <= 0) return 1
+  return n
+}
+
+/**
+ * @param {import('fabric').Canvas} canvas
+ * @param {number} width
+ * @param {number} height
+ * @param {string} [source]
+ */
+export function setCanvasLogicalSize(canvas, width, height, source = 'unknown') {
+  const w = preserveLogicalPx(width)
+  const h = preserveLogicalPx(height)
+  console.log('[logicalSize set]', source, w, h)
+  canvas.__logicalSize = { width: w, height: h }
+}
+
+/**
+ * viewBox가 있으면 __logicalSize를 viewBox와 강제 동기화
+ * @param {import('fabric').Canvas} canvas
+ * @param {string} [source]
+ */
+export function ensureCanvasLogicalSizeFromViewBox(canvas, source = 'ensure') {
+  const vb = canvas.__viewBox
+  if (!(vb?.width > 0 && vb?.height > 0)) return
+  const w = preserveLogicalPx(vb.width)
+  const h = preserveLogicalPx(vb.height)
+  const cur = canvas.__logicalSize
+  if (!cur || cur.width !== w || cur.height !== h) {
+    setCanvasLogicalSize(canvas, w, h, `${source}:fromViewBox`)
+  }
+}
+
+/**
+ * @param {import('fabric').Canvas} canvas
+ * @param {number} width 논리 px
+ * @param {number} height 논리 px
+ * @param {string} [source]
+ * @param {{ zoom?: number; skipLogicalAssign?: boolean }} [options]
+ */
+export function setCanvasLogicalDimensions(canvas, width, height, source = 'unknown', options = {}) {
+  const w = preserveLogicalPx(width)
+  const h = preserveLogicalPx(height)
+  const z = options.zoom ?? canvas.getZoom() ?? 1
+  if (!options.skipLogicalAssign) {
+    setCanvasLogicalSize(canvas, w, h, source)
+  }
+  const dw = w * z
+  const dh = h * z
+  console.log('[setDimensions]', source, dw, dh, `(logical ${w}×${h} @zoom ${z})`)
+  canvas.setDimensions({ width: dw, height: dh })
+  ensureCanvasLogicalSizeFromViewBox(canvas, `${source}:afterSetDimensions`)
+}
+
 /** @param {{ minX?: number; minY?: number; width: number; height: number }} viewBox */
 export function cloneViewBox(viewBox) {
   return {
     minX: Number(viewBox.minX) || 0,
     minY: Number(viewBox.minY) || 0,
-    width: Number(viewBox.width),
-    height: Number(viewBox.height),
+    width: preserveLogicalPx(viewBox.width),
+    height: preserveLogicalPx(viewBox.height),
   }
 }
 
@@ -110,9 +167,12 @@ export function resizeCanvasLogicalSize(canvas, newWidth, newHeight) {
     obj.setCoords()
   }
 
-  canvas.__logicalSize = { width: nw, height: nh }
   const z = canvas.getZoom() || 1
-  canvas.setDimensions({ width: nw * z, height: nh * z })
+  setCanvasLogicalSize(canvas, nw, nh, 'resizeCanvasLogicalSize')
+  setCanvasLogicalDimensions(canvas, nw, nh, 'resizeCanvasLogicalSize', {
+    zoom: z,
+    skipLogicalAssign: true,
+  })
   canvas.calcOffset()
   canvas.requestRenderAll()
 
@@ -180,8 +240,8 @@ function alignTemplateGroupToViewBox(group, viewBox) {
  */
 export function logicalSizeFromViewBox(viewBox) {
   return {
-    width: Math.max(1, Number(viewBox.width) || 1),
-    height: Math.max(1, Number(viewBox.height) || 1),
+    width: preserveLogicalPx(viewBox.width),
+    height: preserveLogicalPx(viewBox.height),
   }
 }
 
@@ -229,15 +289,15 @@ export function applyTemplateCanvasDimensions(canvas, width, height, viewBox) {
   if (viewBox?.width > 0 && viewBox?.height > 0) {
     const vb = cloneViewBox(viewBox)
     canvas.__viewBox = vb
-    w = Math.max(1, vb.width)
-    h = Math.max(1, vb.height)
+    w = vb.width
+    h = vb.height
+    console.log('[viewBox set]', 'applyTemplateCanvasDimensions', w, h)
   } else {
-    w = Math.max(1, Number(width) || 1)
-    h = Math.max(1, Number(height) || 1)
+    w = preserveLogicalPx(width)
+    h = preserveLogicalPx(height)
   }
-  canvas.__logicalSize = { width: w, height: h }
   const z = canvas.getZoom() || 1
-  canvas.setDimensions({ width: w * z, height: h * z })
+  setCanvasLogicalDimensions(canvas, w, h, 'applyTemplateCanvasDimensions', { zoom: z })
   canvas.calcOffset()
 }
 

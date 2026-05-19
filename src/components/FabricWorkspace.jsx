@@ -14,6 +14,7 @@ import {
   resizeCanvasLogicalSize,
   applyTemplateCanvasDimensions,
   logTemplateCanvasMetrics,
+  setCanvasLogicalSize,
   syncCanvasToTemplateBounds,
 } from '../lib/template'
 import { placeObjectAtCanvasCenter } from '../lib/fabricPlacement'
@@ -237,7 +238,7 @@ export function FabricWorkspace({
       if (!isFree && templateViewBox) {
         applyTemplateCanvasDimensions(inst, w, h, templateViewBox)
       } else {
-        inst.__logicalSize = { width: w, height: h }
+        setCanvasLogicalSize(inst, w, h, 'FabricWorkspace:canvasInit')
       }
 
       const onSelect = (e) => {
