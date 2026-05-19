@@ -7,8 +7,8 @@ import notoSansKrSemiBoldWoff2 from '../assets/fonts/NotoSansKR-SemiBold.woff2?u
 import { loadCanvasTextFontsAndRender } from './appFonts'
 
 /**
- * 로컬 번들 폰트 (woff2만 — TTF는 Google CDN, 예전 로컬 TTF는 Thin이 Regular로 잘못 들어가 있었음)
- * @type {Record<string, { woff2Regular?: string; woff2SemiBold?: string }>}
+ * 로컬 번들 폰트 (src/assets/fonts, Vite ?url)
+ * @type {Record<string, { woff2Regular: string; woff2SemiBold: string }>}
  */
 const LOCAL_APP_FONT_URLS = {
   'Noto Sans KR': {
@@ -26,24 +26,7 @@ export const FONT_EXPORT_SUBSTITUTE = {
   Georgia: 'Noto Sans KR',
 }
 
-/** @type {Record<string, { ttf?: string; woff2?: string }>} */
-export const REMOTE_FONT_URLS = {
-  'Noto Sans KR': {
-    ttf: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosanskr/NotoSansKR-Regular.ttf',
-    /** 편집기 기본 굵기(600)와 동일 — PDF bold 슬롯에 사용 */
-    ttfSemiBold:
-      'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosanskr/NotoSansKR-SemiBold.ttf',
-    woff2:
-      'https://cdn.jsdelivr.net/fontsource/fonts/noto-sans-kr@latest/korean-400-normal.woff2',
-  },
-  'Nanum Gothic': {
-    ttf: 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/nanumgothic/NanumGothic-Regular.ttf',
-    woff2:
-      'https://cdn.jsdelivr.net/fontsource/fonts/nanum-gothic@latest/korean-400-normal.woff2',
-  },
-}
-
-const fontBinaryCache = new Map()
+const bundledAssetBase64Cache = new Map()
 
 export function splitFontFamilyList(value) {
   if (!value || typeof value !== 'string') return []
@@ -104,39 +87,62 @@ export function binaryToBase64(binaryString) {
   return btoa(binaryString)
 }
 
-async function fetchFontBinary(url) {
-  if (fontBinaryCache.has(url)) return fontBinaryCache.get(url)
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`Font fetch failed: ${res.status}`)
-  const buf = new Uint8Array(await res.arrayBuffer())
-  const bin = uint8ToBinaryString(buf)
-  fontBinaryCache.set(url, bin)
-  return bin
+/** @param {ArrayBuffer | Uint8Array} buffer */
+export function arrayBufferToBase64(buffer) {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer)
+  return binaryToBase64(uint8ToBinaryString(bytes))
+}
+
+/** @param {string} base64 */
+function base64ToBinaryString(base64) {
+  const binary = atob(base64)
+  const len = binary.length
+  const bytes = new Uint8Array(len)
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i)
+  return uint8ToBinaryString(bytes)
+}
+
+/**
+ * 번들된 woff2/폰트 에셋 URL(Vite)을 fetch → base64
+ * @param {string} assetUrl
+ */
+export async function fetchBundledAssetAsBase64(assetUrl) {
+  if (bundledAssetBase64Cache.has(assetUrl)) {
+    return bundledAssetBase64Cache.get(assetUrl)
+  }
+  const res = await fetch(assetUrl)
+  if (!res.ok) {
+    throw new Error(`로컬 폰트 로드 실패 (${res.status}): ${assetUrl}`)
+  }
+  const base64 = arrayBufferToBase64(await res.arrayBuffer())
+  bundledAssetBase64Cache.set(assetUrl, base64)
+  return base64
+}
+
+/** @returns {Promise<{ regular: string; semiBold: string }>} */
+export async function loadLocalNotoSansKrWoff2Base64() {
+  const [regular, semiBold] = await Promise.all([
+    fetchBundledAssetAsBase64(notoSansKrRegularWoff2),
+    fetchBundledAssetAsBase64(notoSansKrSemiBoldWoff2),
+  ])
+  return { regular, semiBold }
 }
 
 /**
  * @param {string} resolved
  * @param {string} family
- * @param {number} [cssWeight] 400 | 600 | 700
+ * @param {number} cssWeight
+ * @param {Array<{ family: string; fileData?: ArrayBuffer }>} customFonts
  */
-async function loadTtfBinary(resolved, family, cssWeight = 400) {
-  const urls = REMOTE_FONT_URLS[resolved] ?? REMOTE_FONT_URLS[family]
-  if (!urls) return null
-
-  if (cssWeight >= 600 && urls.ttfSemiBold) {
-    try {
-      const binary = await fetchFontBinary(urls.ttfSemiBold)
-      return { binary, format: 'truetype' }
-    } catch {
-      /* fall through to regular */
-    }
+function loadCustomFontBinary(family, resolved, customFonts) {
+  const custom = customFonts.find(
+    (c) => c.family === family || c.family === resolved,
+  )
+  if (!custom?.fileData) return null
+  return {
+    binary: uint8ToBinaryString(new Uint8Array(custom.fileData)),
+    format: 'truetype',
   }
-
-  if (urls.ttf) {
-    const binary = await fetchFontBinary(urls.ttf)
-    return { binary, format: 'truetype' }
-  }
-  return null
 }
 
 /**
@@ -146,63 +152,43 @@ async function loadTtfBinary(resolved, family, cssWeight = 400) {
  */
 async function loadWoff2Binary(resolved, family, cssWeight = 400) {
   const local = LOCAL_APP_FONT_URLS[resolved] ?? LOCAL_APP_FONT_URLS[family]
-  if (local?.woff2Regular || local?.woff2SemiBold) {
-    const url =
-      cssWeight >= 600 && local.woff2SemiBold
-        ? local.woff2SemiBold
-        : local.woff2Regular
-    if (url) {
-      const binary = await fetchFontBinary(url)
-      return { binary, format: 'woff2' }
-    }
-  }
+  if (!local?.woff2Regular) return null
 
-  const urls = REMOTE_FONT_URLS[resolved] ?? REMOTE_FONT_URLS[family]
-  if (urls?.woff2) {
-    const binary = await fetchFontBinary(urls.woff2)
-    return { binary, format: 'woff2' }
-  }
-  return null
+  const assetUrl =
+    cssWeight >= 600 && local.woff2SemiBold
+      ? local.woff2SemiBold
+      : local.woff2Regular
+
+  const base64 = await fetchBundledAssetAsBase64(assetUrl)
+  return { binary: base64ToBinaryString(base64), format: 'woff2' }
 }
 
 /**
  * @param {string} family
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} customFonts
- * @param {{ preferTtf?: boolean }} [options] PDF·일러스트 호환 시 TTF 우선
+ * @param {{ cssWeight?: number }} [options]
  * @returns {Promise<{ binary: string; format: 'woff2' | 'truetype' } | null>}
  */
-export async function loadFontBinaryForExport(family, customFonts = [], options = {}) {
-  const { preferTtf = false } = options
+export async function loadFontBinaryForExport(
+  family,
+  customFonts = [],
+  options = {},
+) {
+  const { cssWeight = 400 } = options
   const resolved = resolveExportFontFamily(family)
 
-  const custom = customFonts.find((c) => c.family === family || c.family === resolved)
-  if (custom?.fileData) {
-    return {
-      binary: uint8ToBinaryString(new Uint8Array(custom.fileData)),
-      format: 'truetype',
-    }
-  }
+  const custom = loadCustomFontBinary(family, resolved, customFonts)
+  if (custom) return custom
 
-  if (preferTtf) {
+  if (resolved === 'Noto Sans KR') {
     try {
-      return await loadTtfBinary(resolved, family)
+      return await loadWoff2Binary(resolved, family, cssWeight)
     } catch {
       return null
     }
   }
 
-  try {
-    const w2 = await loadWoff2Binary(resolved, family)
-    if (w2) return w2
-  } catch {
-    /* fall through */
-  }
-
-  try {
-    return await loadTtfBinary(resolved, family)
-  } catch {
-    return null
-  }
+  return null
 }
 
 /**
@@ -254,42 +240,21 @@ function buildFontFaceRule(family, base64, format, fontWeight = '100 900') {
  * Noto Sans KR Regular TTF → base64 @font-face (일러스트·SVG/PDF 호환)
  * @returns {Promise<string | null>} base64
  */
-export async function loadNotoSansKrRegularTtfBase64(customFonts = []) {
-  const loaded = await loadFontBinaryForExport('Noto Sans KR', customFonts, {
-    preferTtf: true,
-  })
-  if (!loaded || loaded.format !== 'truetype') return null
-  return binaryToBase64(loaded.binary)
+export async function loadNotoSansKrRegularTtfBase64() {
+  const { regular } = await loadLocalNotoSansKrWoff2Base64()
+  return regular
 }
 
 /**
  * @param {string} svgInner
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
  */
-export async function embedNotoSansKrFontFaceInSvg(svgInner, customFonts = []) {
-  const rules = []
-  const regular = await loadFontBinaryForExport('Noto Sans KR', customFonts, {
-    preferTtf: true,
-  })
-  if (regular?.format === 'truetype') {
-    const b64 = binaryToBase64(regular.binary)
-    rules.push(buildFontFaceRule('Noto Sans KR', b64, 'truetype', '400'))
-  }
-
-  const boldLoaded = await loadTtfBinary('Noto Sans KR', 'Noto Sans KR', 700)
-  if (boldLoaded?.format === 'truetype') {
-    rules.push(
-      buildFontFaceRule(
-        'Noto Sans KR',
-        binaryToBase64(boldLoaded.binary),
-        'truetype',
-        '700',
-      ),
-    )
-  } else if (regular?.format === 'truetype') {
-    const b64 = binaryToBase64(regular.binary)
-    rules.push(buildFontFaceRule('Noto Sans KR', b64, 'truetype', '700'))
-  }
+export async function embedNotoSansKrFontFaceInSvg(svgInner) {
+  const { regular, semiBold } = await loadLocalNotoSansKrWoff2Base64()
+  const rules = [
+    buildFontFaceRule('Noto Sans KR', regular, 'woff2', '400'),
+    buildFontFaceRule('Noto Sans KR', semiBold, 'woff2', '700'),
+  ]
 
   if (rules.length === 0) return svgInner
 
@@ -322,7 +287,7 @@ export async function embedFontsInSvgString(
   const { notoOnly = false } = options
 
   if (notoOnly) {
-    return embedNotoSansKrFontFaceInSvg(svgInner, customFonts)
+    return embedNotoSansKrFontFaceInSvg(svgInner)
   }
 
   const embeddedFamilies = new Set()
@@ -554,20 +519,16 @@ export async function loadPdfFontBinaries(family, customFonts = []) {
   const resolved = resolveExportFontFamily(family)
 
   if (resolved === 'Noto Sans KR') {
-    const regularLoaded = await loadTtfBinary(resolved, family, 400)
-    if (!regularLoaded) return null
-    const boldLoaded = await loadTtfBinary(resolved, family, 700)
+    const { regular, semiBold } = await loadLocalNotoSansKrWoff2Base64()
     return {
-      regular: regularLoaded.binary,
-      bold: boldLoaded?.binary ?? regularLoaded.binary,
+      regular: base64ToBinaryString(regular),
+      bold: base64ToBinaryString(semiBold),
     }
   }
 
-  const regularLoaded = await loadFontBinaryForExport(family, customFonts, {
-    preferTtf: true,
-  })
-  if (!regularLoaded || regularLoaded.format !== 'truetype') return null
-  return { regular: regularLoaded.binary, bold: regularLoaded.binary }
+  const custom = loadCustomFontBinary(family, resolved, customFonts)
+  if (!custom) return null
+  return { regular: custom.binary, bold: custom.binary }
 }
 
 /** @param {string} svgInner */
@@ -624,64 +585,38 @@ export function buildPdfFontFaceCss(fonts) {
 }
 
 /**
- * Puppeteer PDF API용 폰트 base64 목록 (Noto + 커스텀 + 캔버스 사용 폰트)
- * @param {import('fabric').Canvas} canvas
+ * Puppeteer PDF API용 폰트 base64 (로컬 woff2 + 업로드 커스텀 폰트만)
+ * @param {import('fabric').Canvas} _canvas
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
  * @returns {Promise<PdfFontPayload[]>}
  */
-export async function collectPdfFontsForExport(canvas, customFonts = []) {
+export async function collectPdfFontsForExport(_canvas, customFonts = []) {
+  const { regular, semiBold } = await loadLocalNotoSansKrWoff2Base64()
+
   /** @type {PdfFontPayload[]} */
-  const fonts = []
-  const seen = new Set()
-
-  /**
-   * @param {string} family
-   * @param {string} weight
-   * @param {string} base64
-   * @param {string} [format]
-   */
-  const pushFont = (family, weight, base64, format = 'truetype') => {
-    const cssWeight = weight === 'bold' ? 'bold' : 'normal'
-    const key = `${family}|${cssWeight}`
-    if (!family || !base64 || seen.has(key)) return
-    seen.add(key)
-    fonts.push({
-      family,
-      weight: cssWeight,
-      base64,
-      format: format === 'woff2' ? 'woff2' : 'truetype',
-    })
-  }
-
-  const notoBins = await loadPdfFontBinaries('Noto Sans KR', customFonts)
-  if (notoBins?.regular) {
-    pushFont('Noto Sans KR', 'normal', binaryToBase64(notoBins.regular), 'truetype')
-  }
-  if (notoBins?.bold) {
-    pushFont('Noto Sans KR', 'bold', binaryToBase64(notoBins.bold), 'truetype')
-  }
+  const fonts = [
+    {
+      family: 'Noto Sans KR',
+      weight: 'normal',
+      base64: regular,
+      format: 'woff2',
+    },
+    {
+      family: 'Noto Sans KR',
+      weight: 'bold',
+      base64: semiBold,
+      format: 'woff2',
+    },
+  ]
 
   for (const entry of customFonts) {
     if (!entry?.family || !entry?.fileData) continue
-    const bin = uint8ToBinaryString(new Uint8Array(entry.fileData))
-    pushFont(entry.family, 'normal', binaryToBase64(bin), 'truetype')
-  }
-
-  const families = canvas ? collectFontFamiliesFromCanvas(canvas) : []
-  for (const fam of families) {
-    const resolved = resolveExportFontFamily(fam)
-    if (resolved === 'Noto Sans KR') continue
-
-    const loaded = await loadFontBinaryForExport(fam, customFonts, {
-      preferTtf: true,
+    fonts.push({
+      family: entry.family,
+      weight: 'normal',
+      base64: arrayBufferToBase64(entry.fileData),
+      format: 'truetype',
     })
-    if (!loaded) continue
-
-    const format = loaded.format === 'woff2' ? 'woff2' : 'truetype'
-    pushFont(fam, 'normal', binaryToBase64(loaded.binary), format)
-    if (resolved !== fam) {
-      pushFont(resolved, 'normal', binaryToBase64(loaded.binary), format)
-    }
   }
 
   return fonts

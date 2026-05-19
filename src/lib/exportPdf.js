@@ -106,7 +106,7 @@ export async function exportFabricToPdf(canvas, customFonts = []) {
       canvas,
       customFonts,
       logical,
-      { preferTtf: true, notoOnly: false },
+      { notoOnly: false },
       { embedFonts: false },
     ),
   )

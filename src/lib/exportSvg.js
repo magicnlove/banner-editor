@@ -9,18 +9,18 @@ import {
  * @param {import('fabric').Canvas} canvas
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
  * @param {{ width: number; height: number }} [logicalSize] —보내기 시 논리 크기(줌 1)
- * @param {{ preferTtf?: boolean; notoOnly?: boolean }} [embedOptions] — TTF @font-face (일러스트·한글)
+ * @param {{ notoOnly?: boolean }} [embedOptions] — 로컬 woff2 @font-face
  * @param {{ embedFonts?: boolean }} [options]
  */
 export async function exportFabricToSvg(
   canvas,
   customFonts = [],
   logicalSize,
-  embedOptions = { preferTtf: true, notoOnly: true },
+  embedOptions = { notoOnly: true },
   options = {},
 ) {
   const { embedFonts = true } = options
-  const fontEmbedOpts = { preferTtf: true, notoOnly: true, ...embedOptions }
+  const fontEmbedOpts = { notoOnly: true, ...embedOptions }
   const wPx = logicalSize?.width > 0 ? logicalSize.width : canvas.getWidth()
   const hPx = logicalSize?.height > 0 ? logicalSize.height : canvas.getHeight()
   const families = collectFontFamiliesFromCanvas(canvas)
