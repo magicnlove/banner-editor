@@ -1,4 +1,4 @@
-import { loadSVGFromString, loadSVGFromURL, util } from 'fabric'
+import { loadSVGFromString, util } from 'fabric'
 import horizontalSvgUrl from '../templates/horizontal.svg?url'
 import horizontalSvgRaw from '../templates/horizontal.svg?raw'
 import verticalSvgUrl from '../templates/vertical.svg?url'
@@ -45,42 +45,6 @@ export function parseViewBoxFromSvgString(svgRaw) {
   const [minX, minY, width, height] = parts
   if (width <= 0 || height <= 0) return null
   return { minX, minY, width, height }
-}
-
-/** @param {string} attrs */
-function stripSvgTransformAttr(attrs) {
-  return attrs.replace(/\s*transform\s*=\s*["'][^"']*["']/gi, '')
-}
-
-/**
- * @param {string} svgRaw
- */
-export function normalizeTemplateSvgForLoad(svgRaw) {
-  const viewBox = parseViewBoxFromSvgString(svgRaw)
-  if (!viewBox) return svgRaw
-
-  let svg = svgRaw.replace(/\s*style="enable-background:[^"]*"/gi, '')
-  const nextViewBox = `0 0 ${viewBox.width} ${viewBox.height}`
-  svg = svg.replace(/viewBox\s*=\s*["'][^"']+["']/i, `viewBox="${nextViewBox}"`)
-
-  if (viewBox.minX === 0 && viewBox.minY === 0) {
-    return svg
-  }
-
-  const translate = `translate(${-viewBox.minX},${-viewBox.minY})`
-  const afterStyle = /(<\/style>\s*)(<g)(\s[^>]*)?(>)/i
-  if (afterStyle.test(svg)) {
-    return svg.replace(afterStyle, (_m, prefix, tag, attrs = '', close) => {
-      const cleaned = stripSvgTransformAttr(attrs)
-      return `${prefix}${tag} transform="${translate}"${cleaned}${close}`
-    })
-  }
-
-  const afterSvg = /(<svg\b[^>]*>\s*)(<g)(\s[^>]*)?(>)/i
-  return svg.replace(afterSvg, (_m, prefix, tag, attrs = '', close) => {
-    const cleaned = stripSvgTransformAttr(attrs)
-    return `${prefix}${tag} transform="${translate}"${cleaned}${close}`
-  })
 }
 
 /** @param {unknown} value */
@@ -221,6 +185,48 @@ function markAsTemplateLayer(obj) {
 }
 
 /**
+ * getBoundingRect() 기준 (0,0) 정렬 — 스케일 변경 없음
+ * @param {import('fabric').FabricObject} group
+ */
+export function alignTemplateGroupToOrigin(group) {
+  group.setCoords()
+  const br = group.getBoundingRect(true, true)
+  if (!(br.width > 0 && br.height > 0)) return null
+
+  group.set({
+    left: (group.left ?? 0) - br.left,
+    top: (group.top ?? 0) - br.top,
+  })
+  group.setCoords()
+
+  const aligned = group.getBoundingRect(true, true)
+  return {
+    width: preserveLogicalPx(aligned.width),
+    height: preserveLogicalPx(aligned.height),
+    boundingRect: aligned,
+  }
+}
+
+/**
+ * 로드 직후: bbox 크기로 캔버스·__logicalSize 설정, 그룹 (0,0) 정렬
+ * @param {import('fabric').Canvas} canvas
+ * @param {import('fabric').FabricObject} group
+ * @param {{ minX: number; minY: number; width: number; height: number } | null} [viewBoxMeta]
+ */
+export function setupTemplateCanvasFromBoundingRect(canvas, group, viewBoxMeta = null) {
+  const measured = alignTemplateGroupToOrigin(group)
+  if (!measured) {
+    throw new Error('Template group has no measurable bounds')
+  }
+  const { width, height } = measured
+  if (viewBoxMeta) {
+    canvas.__viewBox = cloneViewBox(viewBoxMeta)
+  }
+  setCanvasDocumentSize(canvas, width, height, viewBoxMeta ?? undefined)
+  return measured
+}
+
+/**
  * 템플릿 그룹을 캔버스 논리 영역(0,0 ~ w×h)에 꽉 차게 스케일
  * @param {import('fabric').FabricObject} group
  * @param {number} canvasWidth
@@ -327,24 +333,14 @@ export function logTemplateCanvasMetrics(canvas, templateGroup, label = 'templat
  */
 export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   if (!svgRaw) {
-    throw new Error('SVG raw string required for viewBox parsing')
+    throw new Error('SVG raw string required')
   }
 
-  const normalizedRaw = normalizeTemplateSvgForLoad(svgRaw)
-  const parsedViewBox = parseViewBoxFromSvgString(normalizedRaw)
-  if (!parsedViewBox) {
-    throw new Error('SVG template has no viewBox')
-  }
-  const viewBox = cloneViewBox(parsedViewBox)
-  const { width, height } = logicalSizeFromViewBox(viewBox)
+  const parsedViewBox = parseViewBoxFromSvgString(svgRaw)
+  const viewBox = parsedViewBox ? cloneViewBox(parsedViewBox) : null
 
-  let parsed = await loadSVGFromString(normalizedRaw)
-  let objects = (parsed.objects ?? []).filter(Boolean)
-
-  if (objects.length === 0) {
-    parsed = await loadSVGFromURL(svgUrl)
-    objects = (parsed.objects ?? []).filter(Boolean)
-  }
+  const parsed = await loadSVGFromString(svgRaw)
+  const objects = (parsed.objects ?? []).filter(Boolean)
 
   if (objects.length === 0) {
     throw new Error('SVG template could not be parsed')
@@ -358,9 +354,7 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   canvas.add(grouped)
   canvas.sendObjectToBack(grouped)
 
-  canvas.__viewBox = viewBox
-  setCanvasDocumentSize(canvas, width, height)
-  fitTemplateGroupToCanvas(grouped, width, height)
+  const { width, height } = setupTemplateCanvasFromBoundingRect(canvas, grouped, viewBox)
 
   logTemplateCanvasMetrics(canvas, grouped, 'after loadTemplateOntoCanvas')
   canvas.requestRenderAll()
