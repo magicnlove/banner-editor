@@ -127,6 +127,8 @@ export default async function handler(req, res) {
     await new Promise((resolve) => setTimeout(resolve, 1000))
     await page.emulateMediaType('screen')
 
+    console.log('PDF size:', pdfW, pdfH, 'logical:', width, height)
+
     const pdf = await page.pdf({
       width: `${pdfW}px`,
       height: `${pdfH}px`,
