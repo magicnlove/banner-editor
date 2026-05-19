@@ -18,8 +18,8 @@ import {
 } from '../lib/canvasZoom'
 import {
   getLogicalSizeFromCanvas,
-  isTemplateLayerObject,
-  fitTemplateToCanvas,
+  captureTemplateTransform,
+  restoreTemplateTransform,
 } from '../lib/template'
 import { exportFabricToPdf } from '../lib/exportPdf'
 import { exportCanvasToDataUrl } from '../lib/exportRaster'
@@ -163,13 +163,15 @@ export function EditorHeader({
       canvas.requestRenderAll()
 
       const logical = getLogicalSizeFromCanvas(canvas)
-      const saved = prepareCanvasForExport(canvas)
       const needsRasterPrep = kind !== 'pdf'
+      const saved = needsRasterPrep
+        ? {
+            ...prepareCanvasForExport(canvas),
+            templateState: captureTemplateTransform(canvas),
+          }
+        : null
 
       if (needsRasterPrep) {
-        if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
-          fitTemplateToCanvas(canvas)
-        }
         resetCanvasToLogicalForExport(canvas)
       }
 
@@ -192,6 +194,7 @@ export function EditorHeader({
             customFonts,
             logical,
             { notoOnly: false },
+            { skipTemplateFit: true },
           )
           const full = `<?xml version="1.0" encoding="UTF-8"?>\n${inner}`
           downloadBlob(
@@ -221,8 +224,14 @@ export function EditorHeader({
           downloadBlob(blob, 'template.json')
         }
       } finally {
-        if (needsRasterPrep) {
+        if (needsRasterPrep && saved) {
           restoreCanvasAfterExport(canvas, saved)
+          restoreTemplateTransform(canvas, saved.templateState)
+          canvas.requestRenderAll()
+          await new Promise((r) =>
+            requestAnimationFrame(() => requestAnimationFrame(r)),
+          )
+          await fitToScreen()
         }
         if (prev) canvas.setActiveObject(prev)
         canvas.requestRenderAll()
@@ -230,7 +239,7 @@ export function EditorHeader({
         if (isRasterOrVectorExport) setExporting(false)
       }
     },
-    [canvas, customFonts, editorConfig, exporting],
+    [canvas, customFonts, editorConfig, exporting, fitToScreen],
   )
 
   const uiLocked = exporting
