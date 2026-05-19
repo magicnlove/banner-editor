@@ -75,9 +75,9 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'html is required' })
     }
 
-    const w = Math.round(Number(width))
-    const h = Math.round(Number(height))
-    if (!(w > 0 && h > 0)) {
+    const w = Number(width)
+    const h = Number(height)
+    if (!(w > 0 && h > 0) || !Number.isFinite(w) || !Number.isFinite(h)) {
       return res.status(400).json({ error: 'width and height must be positive numbers' })
     }
 
@@ -89,7 +89,7 @@ export default async function handler(req, res) {
     console.log('launching browser...')
     browser = await puppeteer.launch({
       args: chromium.args,
-      defaultViewport: { width: w, height: h },
+      defaultViewport: null,
       executablePath: await chromium.executablePath(),
       headless: chromium.headless,
     })

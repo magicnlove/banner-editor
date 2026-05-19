@@ -158,28 +158,21 @@ function alignTemplateGroupToViewBox(group, viewBox) {
 }
 
 /**
- * 템플릿 그룹 실제 픽셀 크기 (viewBox보다 작으면 bbox 기준 — 캔버스 여백 방지)
- * @param {import('fabric').FabricObject} group
+ * 템플릿 논리 크기 = viewBox 소수값 그대로 (반올림 없음)
  * @param {{ width: number; height: number }} viewBox
  */
-/** @param {number} measured @param {number} viewDim */
-function pickTemplateDimension(measured, viewDim) {
-  if (!(measured > 0)) return viewDim
-  if (Math.abs(measured - viewDim) <= 1) return viewDim
-  if (measured < viewDim) return measured
-  return viewDim
+export function logicalSizeFromViewBox(viewBox) {
+  return {
+    width: Math.max(1, Number(viewBox.width) || 1),
+    height: Math.max(1, Number(viewBox.height) || 1),
+  }
 }
 
+/** @param {import('fabric').FabricObject} group @param {{ width: number; height: number }} viewBox */
 export function measureTemplateLogicalSize(group, viewBox) {
   group.setCoords()
-  const br = group.getBoundingRect(true, true)
-  const width = pickTemplateDimension(br.width, viewBox.width)
-  const height = pickTemplateDimension(br.height, viewBox.height)
-  return {
-    width: Math.max(1, width),
-    height: Math.max(1, height),
-    boundingRect: br,
-  }
+  const boundingRect = group.getBoundingRect(true, true)
+  return { ...logicalSizeFromViewBox(viewBox), boundingRect }
 }
 
 /**
@@ -220,10 +213,10 @@ export function applyTemplateCanvasDimensions(canvas, width, height, viewBox) {
   canvas.__logicalSize = { width: w, height: h }
   if (viewBox) {
     canvas.__viewBox = {
-      minX: viewBox.minX ?? 0,
-      minY: viewBox.minY ?? 0,
-      width: viewBox.width ?? w,
-      height: viewBox.height ?? h,
+      minX: Number(viewBox.minX) || 0,
+      minY: Number(viewBox.minY) || 0,
+      width: Number(viewBox.width) || w,
+      height: Number(viewBox.height) || h,
     }
   }
   canvas.setDimensions({ width: w * z, height: h * z })
@@ -237,13 +230,9 @@ export function syncCanvasToTemplateBounds(canvas) {
   if (!template || !viewBox) return null
 
   alignTemplateGroupToViewBox(template, viewBox)
-  const measured = measureTemplateLogicalSize(template, viewBox)
-  applyTemplateCanvasDimensions(canvas, measured.width, measured.height, {
-    ...viewBox,
-    width: measured.width,
-    height: measured.height,
-  })
-  return measured
+  const logical = logicalSizeFromViewBox(viewBox)
+  applyTemplateCanvasDimensions(canvas, logical.width, logical.height, viewBox)
+  return measureTemplateLogicalSize(template, viewBox)
 }
 
 /**
@@ -283,13 +272,9 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   alignTemplateGroupToViewBox(grouped, viewBox)
   canvas.sendObjectToBack(grouped)
 
+  const { width, height } = logicalSizeFromViewBox(viewBox)
+  applyTemplateCanvasDimensions(canvas, width, height, viewBox)
   const measured = measureTemplateLogicalSize(grouped, viewBox)
-  const { width, height } = measured
-  applyTemplateCanvasDimensions(canvas, width, height, {
-    ...viewBox,
-    width,
-    height,
-  })
   logTemplateCanvasMetrics(canvas, grouped, 'after loadTemplateOntoCanvas')
 
   canvas.requestRenderAll()

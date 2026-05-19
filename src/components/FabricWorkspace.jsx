@@ -346,14 +346,33 @@ export function FabricWorkspace({
     const alreadyLogical =
       Math.abs(logical.width - width) < 1 && Math.abs(logical.height - height) < 1
 
+    const isTemplateCanvas = inst.getObjects().some((o) => isTemplateLayerObject(o))
+    const viewBox = inst.__viewBox
+
     if (propsChanged && !alreadyLogical) {
-      resizeCanvasLogicalSize(inst, width, height)
-      sizeRef.current = { width, height }
+      if (isTemplateCanvas && viewBox) {
+        syncCanvasToTemplateBounds(inst)
+        sizeRef.current = {
+          width: inst.__logicalSize.width,
+          height: inst.__logicalSize.height,
+        }
+      } else {
+        resizeCanvasLogicalSize(inst, width, height)
+        sizeRef.current = { width, height }
+      }
       scheduleFit()
       bump()
     } else if (propsChanged && alreadyLogical) {
-      sizeRef.current = { width, height }
-      applyTemplateCanvasDimensions(inst, logical.width, logical.height, inst.__viewBox)
+      if (isTemplateCanvas && viewBox) {
+        syncCanvasToTemplateBounds(inst)
+        sizeRef.current = {
+          width: inst.__logicalSize.width,
+          height: inst.__logicalSize.height,
+        }
+      } else {
+        sizeRef.current = { width, height }
+        applyTemplateCanvasDimensions(inst, logical.width, logical.height, inst.__viewBox)
+      }
       scheduleFit()
     }
 

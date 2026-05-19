@@ -77,6 +77,7 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
             canvasWidth={canvasWidth}
             canvasHeight={canvasHeight}
             onCanvasSizeChange={onCanvasSizeChange}
+            lockCanvasSize={!isFree}
             customFonts={customFonts}
             onCustomFont={onCustomFont}
           />

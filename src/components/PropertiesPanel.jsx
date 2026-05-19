@@ -307,6 +307,7 @@ export function PropertiesPanel({
   canvasWidth,
   canvasHeight,
   onCanvasSizeChange,
+  lockCanvasSize = false,
   customFonts,
   onCustomFont,
 }) {
@@ -406,6 +407,7 @@ export function PropertiesPanel({
               onChange={(w, h) => handleCanvasSize(w, h)}
               min={CANVAS_SIZE_MIN}
               max={CANVAS_SIZE_MAX}
+              disabled={lockCanvasSize}
             />
             <ColorRow
               label="배경색"
