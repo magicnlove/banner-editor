@@ -16,7 +16,11 @@ import {
   resetCanvasToLogicalForExport,
   restoreCanvasAfterExport,
 } from '../lib/canvasZoom'
-import { getLogicalSizeFromCanvas } from '../lib/template'
+import {
+  getLogicalSizeFromCanvas,
+  isTemplateLayerObject,
+  syncCanvasToTemplateBounds,
+} from '../lib/template'
 import { exportFabricToPdf } from '../lib/exportPdf'
 import { exportCanvasToDataUrl } from '../lib/exportRaster'
 import { exportFabricToSvg } from '../lib/exportSvg'
@@ -149,6 +153,9 @@ export function EditorHeader({
       canvas.discardActiveObject()
       canvas.requestRenderAll()
 
+      if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
+        syncCanvasToTemplateBounds(canvas)
+      }
       const logical = getLogicalSizeFromCanvas(canvas)
       const saved = prepareCanvasForExport(canvas)
       resetCanvasToLogicalForExport(canvas, logical.width, logical.height)

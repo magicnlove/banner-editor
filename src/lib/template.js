@@ -158,16 +158,65 @@ function alignTemplateGroupToViewBox(group, viewBox) {
 }
 
 /**
+ * 템플릿 그룹 실제 픽셀 크기 (viewBox보다 작으면 bbox 기준 — 캔버스 여백 방지)
+ * @param {import('fabric').FabricObject} group
+ * @param {{ width: number; height: number }} viewBox
+ */
+/** @param {number} measured @param {number} viewDim */
+function pickTemplateDimension(measured, viewDim) {
+  if (!(measured > 0)) return viewDim
+  if (Math.abs(measured - viewDim) <= 1) return viewDim
+  if (measured < viewDim) return measured
+  return viewDim
+}
+
+export function measureTemplateLogicalSize(group, viewBox) {
+  group.setCoords()
+  const br = group.getBoundingRect(true, true)
+  const width = pickTemplateDimension(br.width, viewBox.width)
+  const height = pickTemplateDimension(br.height, viewBox.height)
+  return {
+    width: Math.max(1, width),
+    height: Math.max(1, height),
+    boundingRect: br,
+  }
+}
+
+/**
+ * @param {import('fabric').Canvas} canvas
+ * @param {import('fabric').FabricObject} [templateGroup]
+ * @param {string} [label]
+ */
+export function logTemplateCanvasMetrics(canvas, templateGroup, label = 'template') {
+  const logical = canvas.__logicalSize
+  const viewBox = canvas.__viewBox
+  templateGroup?.setCoords()
+  const br = templateGroup?.getBoundingRect(true, true)
+  console.log(`[editor/template-size] ${label}`, {
+    'canvas.width': canvas.width,
+    'canvas.height': canvas.height,
+    'canvas.getWidth()': canvas.getWidth(),
+    'canvas.getHeight()': canvas.getHeight(),
+    'canvas.getZoom()': canvas.getZoom(),
+    '__logicalSize.width': logical?.width,
+    '__logicalSize.height': logical?.height,
+    'template getBoundingRect().width': br?.width,
+    'template getBoundingRect().height': br?.height,
+    'viewBox width': viewBox?.width,
+    'viewBox height': viewBox?.height,
+  })
+}
+
+/**
  * @param {import('fabric').Canvas} canvas
  * @param {number} width
  * @param {number} height
  * @param {{ minX?: number; minY?: number; width?: number; height?: number }} [viewBox]
  */
 export function applyTemplateCanvasDimensions(canvas, width, height, viewBox) {
-  const w = Math.max(1, Math.round(width))
-  const h = Math.max(1, Math.round(height))
-  canvas.setZoom(1)
-  canvas.setDimensions({ width: w, height: h })
+  const w = Math.max(1, Number(width) || 1)
+  const h = Math.max(1, Number(height) || 1)
+  const z = canvas.getZoom() || 1
   canvas.__logicalSize = { width: w, height: h }
   if (viewBox) {
     canvas.__viewBox = {
@@ -177,7 +226,24 @@ export function applyTemplateCanvasDimensions(canvas, width, height, viewBox) {
       height: viewBox.height ?? h,
     }
   }
+  canvas.setDimensions({ width: w * z, height: h * z })
   canvas.calcOffset()
+}
+
+/** @param {import('fabric').Canvas} canvas */
+export function syncCanvasToTemplateBounds(canvas) {
+  const template = canvas.getObjects().find((o) => isTemplateLayerObject(o))
+  const viewBox = canvas.__viewBox
+  if (!template || !viewBox) return null
+
+  alignTemplateGroupToViewBox(template, viewBox)
+  const measured = measureTemplateLogicalSize(template, viewBox)
+  applyTemplateCanvasDimensions(canvas, measured.width, measured.height, {
+    ...viewBox,
+    width: measured.width,
+    height: measured.height,
+  })
+  return measured
 }
 
 /**
@@ -194,8 +260,6 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
   if (!viewBox) {
     throw new Error('SVG template has no viewBox')
   }
-
-  const { width, height } = viewBox
 
   let parsed = await loadSVGFromURL(svgUrl)
   let objects = (parsed.objects ?? []).filter(Boolean)
@@ -214,15 +278,23 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
 
   canvas.clear()
   canvas.backgroundColor = '#ffffff'
-  applyTemplateCanvasDimensions(canvas, width, height, viewBox)
 
   canvas.add(grouped)
   alignTemplateGroupToViewBox(grouped, viewBox)
   canvas.sendObjectToBack(grouped)
 
+  const measured = measureTemplateLogicalSize(grouped, viewBox)
+  const { width, height } = measured
+  applyTemplateCanvasDimensions(canvas, width, height, {
+    ...viewBox,
+    width,
+    height,
+  })
+  logTemplateCanvasMetrics(canvas, grouped, 'after loadTemplateOntoCanvas')
+
   canvas.requestRenderAll()
 
-  return { width, height, viewBox, templateObject: grouped }
+  return { width, height, viewBox, templateObject: grouped, boundingRect: measured.boundingRect }
 }
 
 /**

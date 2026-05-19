@@ -4,6 +4,11 @@ import {
   ensureFontsReady,
   substituteNonEmbeddableFontsInSvg,
 } from './exportFonts'
+import {
+  getLogicalSizeFromCanvas,
+  isTemplateLayerObject,
+  syncCanvasToTemplateBounds,
+} from './template'
 
 /**
  * @param {import('fabric').Canvas} canvas
@@ -21,8 +26,16 @@ export async function exportFabricToSvg(
 ) {
   const { embedFonts = true } = options
   const fontEmbedOpts = { notoOnly: true, ...embedOptions }
-  const wPx = logicalSize?.width > 0 ? logicalSize.width : canvas.getWidth()
-  const hPx = logicalSize?.height > 0 ? logicalSize.height : canvas.getHeight()
+
+  if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
+    syncCanvasToTemplateBounds(canvas)
+  }
+  const logical =
+    logicalSize?.width > 0 && logicalSize?.height > 0
+      ? logicalSize
+      : getLogicalSizeFromCanvas(canvas)
+  const wPx = logical.width
+  const hPx = logical.height
   const families = collectFontFamiliesFromCanvas(canvas)
 
   await ensureFontsReady(families, customFonts)

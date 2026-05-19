@@ -23,8 +23,8 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
     const vb = template?.raw ? parseViewBoxFromSvgString(template.raw) : null
     if (vb) {
       return {
-        width: Math.max(1, Math.round(vb.width)),
-        height: Math.max(1, Math.round(vb.height)),
+        width: Math.max(1, vb.width),
+        height: Math.max(1, vb.height),
       }
     }
     return { width: Math.round(cmToPx(30)), height: Math.round(cmToPx(20)) }

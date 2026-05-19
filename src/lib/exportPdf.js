@@ -6,7 +6,12 @@ import {
   collectPdfFontsForExport,
 } from './exportFonts'
 import { exportFabricToSvg } from './exportSvg'
-import { getLogicalSizeFromCanvas } from './template'
+import {
+  getLogicalSizeFromCanvas,
+  isTemplateLayerObject,
+  logTemplateCanvasMetrics,
+  syncCanvasToTemplateBounds,
+} from './template'
 import {
   buildHtmlTextLayer,
   collectUserTextObjectsForPdf,
@@ -80,9 +85,15 @@ ${fontFaceCss}
  * @returns {Promise<Blob>}
  */
 export async function exportFabricToPdf(canvas, customFonts = []) {
+  if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
+    syncCanvasToTemplateBounds(canvas)
+  }
   const logical = getLogicalSizeFromCanvas(canvas)
   const width = logical.width
   const height = logical.height
+
+  const templateObj = canvas.getObjects().find((o) => isTemplateLayerObject(o))
+  logTemplateCanvasMetrics(canvas, templateObj, 'before PDF export')
 
   if (
     !(width > 0 && height > 0) ||
