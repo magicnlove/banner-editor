@@ -230,11 +230,14 @@ export function fitTemplateGroupToCanvas(group, canvasWidth, canvasHeight) {
   const cw = preserveLogicalPx(canvasWidth)
   const ch = preserveLogicalPx(canvasHeight)
 
+  // 스케일 리셋 후 (0,0) 배치
   group.set({
-    originX: 'left',
-    originY: 'top',
+    scaleX: 1,
+    scaleY: 1,
     left: 0,
     top: 0,
+    originX: 'left',
+    originY: 'top',
   })
   group.setCoords()
 
@@ -244,34 +247,8 @@ export function fitTemplateGroupToCanvas(group, canvasWidth, canvasHeight) {
   const scaleX = cw / br.width
   const scaleY = ch / br.height
 
-  group.set({
-    scaleX: (group.scaleX ?? 1) * scaleX,
-    scaleY: (group.scaleY ?? 1) * scaleY,
-  })
+  group.set({ scaleX, scaleY, left: -br.left * scaleX, top: -br.top * scaleY })
   group.setCoords()
-
-  const br2 = group.getBoundingRect(true, true)
-  group.set({
-    left: (group.left ?? 0) - br2.left,
-    top: (group.top ?? 0) - br2.top,
-  })
-  group.setCoords()
-}
-
-/**
- * @param {import('fabric').Canvas} canvas
- */
-export function fitTemplateToCanvas(canvas) {
-  const template = canvas.getObjects().find((o) => isTemplateLayerObject(o))
-  if (!template) return null
-  const { width, height } = getLogicalSizeFromCanvas(canvas)
-  fitTemplateGroupToCanvas(template, width, height)
-  return { width, height }
-}
-
-/** @param {import('fabric').Canvas} canvas */
-export function syncCanvasToTemplateBounds(canvas) {
-  return fitTemplateToCanvas(canvas)
 }
 
 /**
