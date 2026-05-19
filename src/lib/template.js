@@ -248,6 +248,32 @@ export function fitTemplateToCanvas(canvas) {
   return { width, height }
 }
 
+/** @param {import('fabric').Canvas} canvas */
+export function captureTemplateTransform(canvas) {
+  const template = canvas.getObjects().find((o) => isTemplateLayerObject(o))
+  if (!template) return null
+  return {
+    left: template.left ?? 0,
+    top: template.top ?? 0,
+    scaleX: template.scaleX ?? 1,
+    scaleY: template.scaleY ?? 1,
+    originX: template.originX ?? 'left',
+    originY: template.originY ?? 'top',
+  }
+}
+
+/**
+ * @param {import('fabric').Canvas} canvas
+ * @param {ReturnType<typeof captureTemplateTransform>} state
+ */
+export function restoreTemplateTransform(canvas, state) {
+  if (!state) return
+  const template = canvas.getObjects().find((o) => isTemplateLayerObject(o))
+  if (!template) return
+  template.set(state)
+  template.setCoords()
+}
+
 /**
  * @param {import('fabric').FabricObject} obj
  * @param {number} scaleX

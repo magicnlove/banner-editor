@@ -162,17 +162,23 @@ export function EditorHeader({
       canvas.discardActiveObject()
       canvas.requestRenderAll()
 
-      if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
-        fitTemplateToCanvas(canvas)
-      }
       const logical = getLogicalSizeFromCanvas(canvas)
       const saved = prepareCanvasForExport(canvas)
-      resetCanvasToLogicalForExport(canvas)
+      const needsRasterPrep = kind !== 'pdf'
+
+      if (needsRasterPrep) {
+        if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
+          fitTemplateToCanvas(canvas)
+        }
+        resetCanvasToLogicalForExport(canvas)
+      }
 
       try {
         if (kind === 'pdf') {
           try {
-            const blob = await exportFabricToPdf(canvas, customFonts, { saved })
+            const blob = await exportFabricToPdf(canvas, customFonts, {
+              onAfterRestore: fitToScreen,
+            })
             downloadBlob(blob, 'banner.pdf')
           } catch (err) {
             console.error(err)
@@ -215,7 +221,9 @@ export function EditorHeader({
           downloadBlob(blob, 'template.json')
         }
       } finally {
-        restoreCanvasAfterExport(canvas, saved)
+        if (needsRasterPrep) {
+          restoreCanvasAfterExport(canvas, saved)
+        }
         if (prev) canvas.setActiveObject(prev)
         canvas.requestRenderAll()
         setOpen(false)

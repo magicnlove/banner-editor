@@ -8,6 +8,8 @@ import {
   isTemplateLayerObject,
   logTemplateCanvasMetrics,
   fitTemplateToCanvas,
+  captureTemplateTransform,
+  restoreTemplateTransform,
 } from './template'
 import {
   buildHtmlTextLayer,
@@ -22,6 +24,32 @@ import {
 
 const PDF_API_URL =
   import.meta.env.VITE_PDF_API_URL || '/api/generate-pdf'
+
+/**
+ * @typedef {ReturnType<typeof prepareCanvasForExport> & {
+ *   templateState: ReturnType<typeof captureTemplateTransform>
+ * }} PdfExportSavedState
+ */
+
+/**
+ * @param {import('fabric').Canvas} canvas
+ * @returns {PdfExportSavedState}
+ */
+function prepareFullPdfExportState(canvas) {
+  return {
+    ...prepareCanvasForExport(canvas),
+    templateState: captureTemplateTransform(canvas),
+  }
+}
+
+/**
+ * @param {import('fabric').Canvas} canvas
+ * @param {PdfExportSavedState} saved
+ */
+function restoreFullPdfExportState(canvas, saved) {
+  restoreCanvasAfterExport(canvas, saved)
+  restoreTemplateTransform(canvas, saved.templateState)
+}
 
 /**
  * @param {number} width
@@ -81,19 +109,18 @@ function buildPdfHtmlDocument(width, height, svgInner, textLayerHtml) {
 /**
  * @param {import('fabric').Canvas} canvas
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
- * @param {{ saved?: ReturnType<typeof prepareCanvasForExport> }} [options]
+ * @param {{ onAfterRestore?: () => void | Promise<void> }} [options]
  * @returns {Promise<Blob>}
  */
 export async function exportFabricToPdf(canvas, customFonts = [], options = {}) {
-  const saved = options.saved ?? prepareCanvasForExport(canvas)
-  if (!options.saved) {
-    resetCanvasToLogicalForExport(canvas)
-  }
+  const saved = prepareFullPdfExportState(canvas)
+  resetCanvasToLogicalForExport(canvas)
 
   try {
     if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
       fitTemplateToCanvas(canvas)
     }
+
     const logical = getLogicalSizeFromCanvas(canvas)
     const width = logical.width
     const height = logical.height
@@ -153,7 +180,8 @@ export async function exportFabricToPdf(canvas, customFonts = [], options = {}) 
     const buffer = await res.arrayBuffer()
     return new Blob([buffer], { type: 'application/pdf' })
   } finally {
-    restoreCanvasAfterExport(canvas, saved)
+    restoreFullPdfExportState(canvas, saved)
     canvas.requestRenderAll()
+    await options.onAfterRestore?.()
   }
 }
