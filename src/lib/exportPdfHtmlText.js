@@ -10,33 +10,81 @@ export function collectUserTextObjectsForPdf(canvas) {
 
 /**
  * @param {import('fabric').Canvas} canvas
- * @param {() => Promise<string>} exportSvg
+ * @param {() => Promise<T>} fn
+ * @template T
  */
-export async function exportSvgWithUserTextHidden(canvas, exportSvg) {
+export async function withUserTextHidden(canvas, fn) {
   const texts = collectUserTextObjectsForPdf(canvas)
   const states = texts.map((obj) => ({ obj, visible: obj.visible }))
 
   for (const obj of texts) {
     obj.set({ visible: false })
   }
-  if (typeof canvas.requestRenderAll === 'function') {
-    canvas.requestRenderAll()
-  } else {
-    canvas.renderAll?.()
-  }
+  canvas.requestRenderAll?.()
+
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
 
   try {
-    return await exportSvg()
+    return await fn()
   } finally {
     for (const { obj, visible } of states) {
       obj.set({ visible })
     }
-    if (typeof canvas.requestRenderAll === 'function') {
-      canvas.requestRenderAll()
-    } else {
-      canvas.renderAll?.()
-    }
+    canvas.requestRenderAll?.()
   }
+}
+
+/** @param {import('fabric').Canvas} canvas
+ * @param {() => Promise<string>} exportSvg
+ */
+export async function exportSvgWithUserTextHidden(canvas, exportSvg) {
+  return withUserTextHidden(canvas, exportSvg)
+}
+
+/** @param {unknown} fill */
+export function fillToCssColor(fill) {
+  if (typeof fill === 'string' && fill) return fill
+  if (fill && typeof fill === 'object' && typeof fill.toHex === 'function') {
+    return `#${fill.toHex()}`
+  }
+  return '#1a1d24'
+}
+
+/** @param {string} fontFamily */
+export function primaryFontFamilyName(fontFamily) {
+  return String(fontFamily || 'Noto Sans KR')
+    .split(',')[0]
+    .trim()
+    .replace(/^["']|["']$/g, '')
+}
+
+/**
+ * PDF API용 텍스트 메타 (줌 1 논리 좌표)
+ * @param {import('fabric').Canvas} canvas
+ */
+export function extractTextObjectsForPdf(canvas) {
+  return collectUserTextObjectsForPdf(canvas).map((obj) => {
+    obj.setCoords?.()
+    const bounds = obj.getBoundingRect(true, true)
+    return {
+      text: String(obj.text ?? ''),
+      left: bounds.left,
+      top: bounds.top,
+      width: Math.max(bounds.width, 1),
+      height: Math.max(bounds.height, 1),
+      fontSize: Number(obj.fontSize) || 16,
+      fontFamily: primaryFontFamilyName(obj.fontFamily),
+      fill: fillToCssColor(obj.fill),
+      textAlign: obj.textAlign || 'left',
+      fontWeight: obj.fontWeight ?? 'normal',
+      scaleX: obj.scaleX ?? 1,
+      scaleY: obj.scaleY ?? 1,
+      angle: obj.angle ?? 0,
+      lineHeight: obj.lineHeight ?? 1.16,
+      charSpacing: Number(obj.charSpacing) || 0,
+      opacity: obj.opacity ?? 1,
+    }
+  })
 }
 
 /** @param {string} value */
@@ -48,29 +96,11 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;')
 }
 
-/** @param {unknown} fill */
-function fillToCssColor(fill) {
-  if (typeof fill === 'string' && fill) return fill
-  if (fill && typeof fill === 'object' && typeof fill.toHex === 'function') {
-    return `#${fill.toHex()}`
-  }
-  return '#1a1d24'
-}
-
 /** @param {unknown} fontWeight */
 function cssFontWeight(fontWeight) {
   if (fontWeight === 'bold') return 'bold'
   const n = Number(fontWeight)
   return Number.isFinite(n) && n >= 600 ? 'bold' : 'normal'
-}
-
-/** @param {string} fontFamily */
-function primaryFontFamily(fontFamily) {
-  const first = String(fontFamily || 'Noto Sans KR')
-    .split(',')[0]
-    .trim()
-    .replace(/^["']|["']$/g, '')
-  return first.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 }
 
 /**
@@ -94,7 +124,7 @@ export function buildHtmlTextOverlay(textObj) {
   const textDecoration = decorations.length ? decorations.join(' ') : 'none'
 
   const content = escapeHtml(String(textObj.text ?? ''))
-  const family = primaryFontFamily(textObj.fontFamily)
+  const family = primaryFontFamilyName(textObj.fontFamily).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 
   return `<div class="pdf-text" style="
     position: absolute;
