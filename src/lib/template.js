@@ -84,8 +84,8 @@ export function setCanvasDimensionsWithLog(canvas, width, height, source) {
  */
 export function setCanvasLogicalSize(canvas, width, height) {
   canvas.__logicalSize = {
-    width: preserveLogicalPx(width),
-    height: preserveLogicalPx(height),
+    width: Math.ceil(preserveLogicalPx(width)),
+    height: Math.ceil(preserveLogicalPx(height)),
   }
 }
 
