@@ -566,6 +566,104 @@ function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+function escapeCssFontFamily(family) {
+  return String(family).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+}
+
+/**
+ * @typedef {{ family: string; weight: string; base64: string; format: string }} PdfFontPayload
+ */
+
+/**
+ * @param {PdfFontPayload[]} fonts
+ */
+export function buildPdfFontFaceCss(fonts) {
+  if (!Array.isArray(fonts) || fonts.length === 0) return ''
+
+  return fonts
+    .filter((f) => f?.family && f?.base64)
+    .map(({ family, weight, base64, format }) => {
+      const fmt = format === 'woff2' ? 'woff2' : 'truetype'
+      const mime = format === 'woff2' ? 'font/woff2' : 'font/truetype'
+      const cssWeight =
+        weight === 'bold' || weight === '700' || weight === '600'
+          ? 'bold'
+          : 'normal'
+      const safeFamily = escapeCssFontFamily(family)
+      return `@font-face {
+  font-family: '${safeFamily}';
+  src: url('data:${mime};base64,${base64}') format('${fmt}');
+  font-weight: ${cssWeight};
+  font-style: normal;
+}`
+    })
+    .join('\n\n')
+}
+
+/**
+ * Puppeteer PDF API용 폰트 base64 목록 (Noto + 커스텀 + 캔버스 사용 폰트)
+ * @param {import('fabric').Canvas} canvas
+ * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
+ * @returns {Promise<PdfFontPayload[]>}
+ */
+export async function collectPdfFontsForExport(canvas, customFonts = []) {
+  /** @type {PdfFontPayload[]} */
+  const fonts = []
+  const seen = new Set()
+
+  /**
+   * @param {string} family
+   * @param {string} weight
+   * @param {string} base64
+   * @param {string} [format]
+   */
+  const pushFont = (family, weight, base64, format = 'truetype') => {
+    const cssWeight = weight === 'bold' ? 'bold' : 'normal'
+    const key = `${family}|${cssWeight}`
+    if (!family || !base64 || seen.has(key)) return
+    seen.add(key)
+    fonts.push({
+      family,
+      weight: cssWeight,
+      base64,
+      format: format === 'woff2' ? 'woff2' : 'truetype',
+    })
+  }
+
+  const notoBins = await loadPdfFontBinaries('Noto Sans KR', customFonts)
+  if (notoBins?.regular) {
+    pushFont('Noto Sans KR', 'normal', binaryToBase64(notoBins.regular), 'truetype')
+  }
+  if (notoBins?.bold) {
+    pushFont('Noto Sans KR', 'bold', binaryToBase64(notoBins.bold), 'truetype')
+  }
+
+  for (const entry of customFonts) {
+    if (!entry?.family || !entry?.fileData) continue
+    const bin = uint8ToBinaryString(new Uint8Array(entry.fileData))
+    pushFont(entry.family, 'normal', binaryToBase64(bin), 'truetype')
+  }
+
+  const families = canvas ? collectFontFamiliesFromCanvas(canvas) : []
+  for (const fam of families) {
+    const resolved = resolveExportFontFamily(fam)
+    if (resolved === 'Noto Sans KR') continue
+
+    const loaded = await loadFontBinaryForExport(fam, customFonts, {
+      preferTtf: true,
+    })
+    if (!loaded) continue
+
+    const format = loaded.format === 'woff2' ? 'woff2' : 'truetype'
+    pushFont(fam, 'normal', binaryToBase64(loaded.binary), format)
+    if (resolved !== fam) {
+      pushFont(resolved, 'normal', binaryToBase64(loaded.binary), format)
+    }
+  }
+
+  return fonts
+}
+
 /** @param {import('fabric').Canvas} canvas */
 export async function prepareCanvasForRasterExport(canvas, customFonts = []) {
   const families = collectFontFamiliesFromCanvas(canvas)

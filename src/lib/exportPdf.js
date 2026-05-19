@@ -1,8 +1,17 @@
 /**
- * Fabric → SVG(@font-face) → Vercel Puppeteer API → PDF
+ * Fabric → SVG(도형) + HTML 텍스트 → Puppeteer PDF (텍스트 선택·복사 가능)
  */
+import {
+  buildPdfFontFaceCss,
+  collectPdfFontsForExport,
+} from './exportFonts'
 import { exportFabricToSvg } from './exportSvg'
 import { getLogicalSizeFromCanvas } from './template'
+import {
+  buildHtmlTextLayer,
+  collectUserTextObjectsForPdf,
+  exportSvgWithUserTextHidden,
+} from './exportPdfHtmlText'
 
 const PDF_API_URL =
   import.meta.env.VITE_PDF_API_URL || '/api/generate-pdf'
@@ -11,24 +20,57 @@ const PDF_API_URL =
  * @param {number} width
  * @param {number} height
  * @param {string} svgInner
+ * @param {string} textLayerHtml
+ * @param {string} fontFaceCss
  */
-function buildPdfHtmlDocument(width, height, svgInner) {
+function buildPdfHtmlDocument(width, height, svgInner, textLayerHtml, fontFaceCss) {
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <style>
+${fontFaceCss}
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
       width: ${width}px;
       height: ${height}px;
       overflow: hidden;
     }
-    body { display: block; }
-    svg { display: block; width: ${width}px; height: ${height}px; }
+    .pdf-canvas {
+      position: relative;
+      width: ${width}px;
+      height: ${height}px;
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+    .pdf-canvas > svg {
+      position: absolute;
+      left: 0;
+      top: 0;
+      display: block;
+      width: ${width}px;
+      height: ${height}px;
+    }
+    .pdf-text-layer {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+    .pdf-text {
+      margin: 0;
+      padding: 0;
+    }
   </style>
 </head>
-<body>${svgInner}</body>
+<body>
+  <div class="pdf-canvas">
+    ${svgInner}
+    ${textLayerHtml}
+  </div>
+</body>
 </html>`
 }
 
@@ -50,17 +92,37 @@ export async function exportFabricToPdf(canvas, customFonts = []) {
     throw new Error('캔버스 크기를 확인할 수 없습니다.')
   }
 
-  const svgInner = await exportFabricToSvg(canvas, customFonts, logical, {
-    preferTtf: true,
-    notoOnly: true,
-  })
+  const fonts = await collectPdfFontsForExport(canvas, customFonts)
+  if (fonts.length === 0) {
+    throw new Error('PDF용 폰트를 불러오지 못했습니다.')
+  }
 
-  const html = buildPdfHtmlDocument(width, height, svgInner)
+  const fontFaceCss = buildPdfFontFaceCss(fonts)
+  const userTexts = collectUserTextObjectsForPdf(canvas)
+  const textLayerHtml = buildHtmlTextLayer(userTexts)
+
+  const svgInner = await exportSvgWithUserTextHidden(canvas, () =>
+    exportFabricToSvg(
+      canvas,
+      customFonts,
+      logical,
+      { preferTtf: true, notoOnly: false },
+      { embedFonts: false },
+    ),
+  )
+
+  const html = buildPdfHtmlDocument(
+    width,
+    height,
+    svgInner,
+    textLayerHtml,
+    fontFaceCss,
+  )
 
   const res = await fetch(PDF_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ html, width, height }),
+    body: JSON.stringify({ html, width, height, fonts }),
   })
 
   if (!res.ok) {
@@ -74,5 +136,6 @@ export async function exportFabricToPdf(canvas, customFonts = []) {
     throw new Error(`PDF 생성 실패 (${res.status}): ${detail}`)
   }
 
-  return res.blob()
+  const buffer = await res.arrayBuffer()
+  return new Blob([buffer], { type: 'application/pdf' })
 }
