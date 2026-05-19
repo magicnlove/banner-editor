@@ -106,18 +106,26 @@ export function loadWorkStateOntoCanvas(canvas, data) {
   }
 
   const logicalSize = payload.logicalSize
+  const savedViewBox =
+    payload.viewBox && typeof payload.viewBox === 'object'
+      ? /** @type {{ width?: number; height?: number }} */ (payload.viewBox)
+      : null
   const width =
-    Number(logicalSize?.width) > 0
-      ? Number(logicalSize.width)
-      : Number(payload.width) > 0
-        ? Number(payload.width)
-        : null
+    Number(savedViewBox?.width) > 0
+      ? Number(savedViewBox.width)
+      : Number(logicalSize?.width) > 0
+        ? Number(logicalSize.width)
+        : Number(payload.width) > 0
+          ? Number(payload.width)
+          : null
   const height =
-    Number(logicalSize?.height) > 0
-      ? Number(logicalSize.height)
-      : Number(payload.height) > 0
-        ? Number(payload.height)
-        : null
+    Number(savedViewBox?.height) > 0
+      ? Number(savedViewBox.height)
+      : Number(logicalSize?.height) > 0
+        ? Number(logicalSize.height)
+        : Number(payload.height) > 0
+          ? Number(payload.height)
+          : null
 
   if (!width || !height) {
     throw new Error('캔버스 크기 정보가 없습니다.')

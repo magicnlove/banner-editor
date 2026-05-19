@@ -47,6 +47,16 @@ export function parseViewBoxFromSvgString(svgRaw) {
   return { minX, minY, width, height }
 }
 
+/** @param {{ minX?: number; minY?: number; width: number; height: number }} viewBox */
+export function cloneViewBox(viewBox) {
+  return {
+    minX: Number(viewBox.minX) || 0,
+    minY: Number(viewBox.minY) || 0,
+    width: Number(viewBox.width),
+    height: Number(viewBox.height),
+  }
+}
+
 /**
  * @param {Record<string, unknown>} [options] Fabric parse options
  * @param {string} [svgRaw]
@@ -111,11 +121,18 @@ export function resizeCanvasLogicalSize(canvas, newWidth, newHeight) {
 
 /** @param {import('fabric').Canvas} canvas */
 export function getLogicalSizeFromCanvas(canvas) {
-  if (canvas.__logicalSize?.width > 0 && canvas.__logicalSize?.height > 0) {
-    return { ...canvas.__logicalSize }
-  }
+  // 템플릿: viewBox가 단일 진실 소스 (HTML 캔버스 정수화·반올림과 분리)
   if (canvas.__viewBox?.width > 0 && canvas.__viewBox?.height > 0) {
-    return { width: canvas.__viewBox.width, height: canvas.__viewBox.height }
+    return {
+      width: Number(canvas.__viewBox.width),
+      height: Number(canvas.__viewBox.height),
+    }
+  }
+  if (canvas.__logicalSize?.width > 0 && canvas.__logicalSize?.height > 0) {
+    return {
+      width: Number(canvas.__logicalSize.width),
+      height: Number(canvas.__logicalSize.height),
+    }
   }
   const z = canvas.getZoom() || 1
   return {
@@ -207,18 +224,19 @@ export function logTemplateCanvasMetrics(canvas, templateGroup, label = 'templat
  * @param {{ minX?: number; minY?: number; width?: number; height?: number }} [viewBox]
  */
 export function applyTemplateCanvasDimensions(canvas, width, height, viewBox) {
-  const w = Math.max(1, Number(width) || 1)
-  const h = Math.max(1, Number(height) || 1)
-  const z = canvas.getZoom() || 1
-  canvas.__logicalSize = { width: w, height: h }
-  if (viewBox) {
-    canvas.__viewBox = {
-      minX: Number(viewBox.minX) || 0,
-      minY: Number(viewBox.minY) || 0,
-      width: Number(viewBox.width) || w,
-      height: Number(viewBox.height) || h,
-    }
+  let w
+  let h
+  if (viewBox?.width > 0 && viewBox?.height > 0) {
+    const vb = cloneViewBox(viewBox)
+    canvas.__viewBox = vb
+    w = Math.max(1, vb.width)
+    h = Math.max(1, vb.height)
+  } else {
+    w = Math.max(1, Number(width) || 1)
+    h = Math.max(1, Number(height) || 1)
   }
+  canvas.__logicalSize = { width: w, height: h }
+  const z = canvas.getZoom() || 1
   canvas.setDimensions({ width: w * z, height: h * z })
   canvas.calcOffset()
 }
@@ -245,10 +263,11 @@ export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
     throw new Error('SVG raw string required for viewBox parsing')
   }
 
-  const viewBox = parseViewBoxFromSvgString(svgRaw)
-  if (!viewBox) {
+  const parsedViewBox = parseViewBoxFromSvgString(svgRaw)
+  if (!parsedViewBox) {
     throw new Error('SVG template has no viewBox')
   }
+  const viewBox = cloneViewBox(parsedViewBox)
 
   let parsed = await loadSVGFromURL(svgUrl)
   let objects = (parsed.objects ?? []).filter(Boolean)

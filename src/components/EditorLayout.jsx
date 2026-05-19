@@ -16,19 +16,23 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
     [config, isFree],
   )
 
+  const templateViewBox = useMemo(() => {
+    if (isFree || !template?.raw) return null
+    return parseViewBoxFromSvgString(template.raw)
+  }, [isFree, template])
+
   const initialSize = useMemo(() => {
     if (isFree) {
       return { width: config.widthPx, height: config.heightPx }
     }
-    const vb = template?.raw ? parseViewBoxFromSvgString(template.raw) : null
-    if (vb) {
+    if (templateViewBox) {
       return {
-        width: Math.max(1, vb.width),
-        height: Math.max(1, vb.height),
+        width: Math.max(1, templateViewBox.width),
+        height: Math.max(1, templateViewBox.height),
       }
     }
     return { width: Math.round(cmToPx(30)), height: Math.round(cmToPx(20)) }
-  }, [config, isFree, template])
+  }, [config, isFree, templateViewBox])
 
   const [canvasWidth, setCanvasWidth] = useState(initialSize.width)
   const [canvasHeight, setCanvasHeight] = useState(initialSize.height)
@@ -66,11 +70,12 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
         <div className="flex min-h-0 min-w-0 flex-1">
           <ToolPanel />
           <FabricWorkspace
-            width={canvasWidth}
-            height={canvasHeight}
+            width={isFree ? canvasWidth : (templateViewBox?.width ?? canvasWidth)}
+            height={isFree ? canvasHeight : (templateViewBox?.height ?? canvasHeight)}
             isFree={isFree}
             templateSvgUrl={template?.url ?? null}
             templateSvgRaw={template?.raw ?? null}
+            templateViewBox={templateViewBox}
             onTemplateLoaded={onTemplateLoaded}
           />
           <PropertiesPanel

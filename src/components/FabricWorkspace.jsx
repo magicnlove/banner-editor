@@ -12,7 +12,6 @@ import {
   loadTemplateOntoCanvas,
   initBlankCanvas,
   resizeCanvasLogicalSize,
-  parseViewBoxFromSvgString,
   applyTemplateCanvasDimensions,
   logTemplateCanvasMetrics,
   syncCanvasToTemplateBounds,
@@ -55,6 +54,7 @@ export function FabricWorkspace({
   isFree = false,
   templateSvgUrl,
   templateSvgRaw,
+  templateViewBox = null,
   onTemplateLoaded,
 }) {
   const hostRef = useRef(null)
@@ -222,13 +222,10 @@ export function FabricWorkspace({
       if (cancelled) return
 
       let { width: w, height: h } = sizeRef.current
-      if (!isFree && templateSvgRaw) {
-        const vb = parseViewBoxFromSvgString(templateSvgRaw)
-        if (vb) {
-          w = Math.max(1, vb.width)
-          h = Math.max(1, vb.height)
-          sizeRef.current = { width: w, height: h }
-        }
+      if (!isFree && templateViewBox) {
+        w = Math.max(1, templateViewBox.width)
+        h = Math.max(1, templateViewBox.height)
+        sizeRef.current = { width: w, height: h }
       }
       inst = new Canvas(el, {
         width: w,
@@ -237,7 +234,11 @@ export function FabricWorkspace({
         preserveObjectStacking: true,
       })
       fabricRef.current = inst
-      inst.__logicalSize = { width: w, height: h }
+      if (!isFree && templateViewBox) {
+        applyTemplateCanvasDimensions(inst, w, h, templateViewBox)
+      } else {
+        inst.__logicalSize = { width: w, height: h }
+      }
 
       const onSelect = (e) => {
         const t = e?.selected?.[0] ?? e?.target ?? null
@@ -282,11 +283,12 @@ export function FabricWorkspace({
         appliedCanvasSizeRef.current = { width: lw, height: lh }
         if (!isFree) {
           syncCanvasToTemplateBounds(inst)
-          lw = inst.__logicalSize.width
-          lh = inst.__logicalSize.height
         } else {
           applyTemplateCanvasDimensions(inst, lw, lh, viewBox)
         }
+        const logicalAfterLoad = getLogicalSizeFromCanvas(inst)
+        lw = logicalAfterLoad.width
+        lh = logicalAfterLoad.height
         await loadCanvasTextFontsAndRender(inst)
         if (cancelled) return
         const templateObj = inst
@@ -329,6 +331,7 @@ export function FabricWorkspace({
     isFree,
     templateSvgUrl,
     templateSvgRaw,
+    templateViewBox,
     onTemplateLoaded,
     registerCanvas,
     setSelected,
@@ -339,44 +342,37 @@ export function FabricWorkspace({
     const inst = fabricRef.current
     if (!inst || !canvasReadyRef.current || loading) return
 
+    const isTemplateCanvas = inst.getObjects().some((o) => isTemplateLayerObject(o))
+    const viewBox = inst.__viewBox
+
+    if (isTemplateCanvas && viewBox) {
+      syncCanvasToTemplateBounds(inst)
+      const logical = getLogicalSizeFromCanvas(inst)
+      sizeRef.current = logical
+      appliedCanvasSizeRef.current = logical
+      scheduleFit()
+      return
+    }
+
     const prev = appliedCanvasSizeRef.current
     const logical = getLogicalSizeFromCanvas(inst)
     const propsChanged =
       prev && (prev.width !== width || prev.height !== height)
     const alreadyLogical =
-      Math.abs(logical.width - width) < 1 && Math.abs(logical.height - height) < 1
-
-    const isTemplateCanvas = inst.getObjects().some((o) => isTemplateLayerObject(o))
-    const viewBox = inst.__viewBox
+      Math.abs(logical.width - width) < 0.01 && Math.abs(logical.height - height) < 0.01
 
     if (propsChanged && !alreadyLogical) {
-      if (isTemplateCanvas && viewBox) {
-        syncCanvasToTemplateBounds(inst)
-        sizeRef.current = {
-          width: inst.__logicalSize.width,
-          height: inst.__logicalSize.height,
-        }
-      } else {
-        resizeCanvasLogicalSize(inst, width, height)
-        sizeRef.current = { width, height }
-      }
+      resizeCanvasLogicalSize(inst, width, height)
+      sizeRef.current = { width, height }
       scheduleFit()
       bump()
     } else if (propsChanged && alreadyLogical) {
-      if (isTemplateCanvas && viewBox) {
-        syncCanvasToTemplateBounds(inst)
-        sizeRef.current = {
-          width: inst.__logicalSize.width,
-          height: inst.__logicalSize.height,
-        }
-      } else {
-        sizeRef.current = { width, height }
-        applyTemplateCanvasDimensions(inst, logical.width, logical.height, inst.__viewBox)
-      }
+      sizeRef.current = { width, height }
+      applyTemplateCanvasDimensions(inst, logical.width, logical.height, inst.__viewBox)
       scheduleFit()
     }
 
-    appliedCanvasSizeRef.current = { width, height }
+    appliedCanvasSizeRef.current = getLogicalSizeFromCanvas(inst)
   }, [width, height, loading, scheduleFit, bump])
 
   useEffect(() => {

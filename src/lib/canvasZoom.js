@@ -12,8 +12,17 @@ export function clampZoom(z) {
 
 /** @param {import('fabric').Canvas} canvas */
 export function getCanvasLogicalSize(canvas) {
+  if (canvas.__viewBox?.width > 0 && canvas.__viewBox?.height > 0) {
+    return {
+      width: Number(canvas.__viewBox.width),
+      height: Number(canvas.__viewBox.height),
+    }
+  }
   if (canvas.__logicalSize?.width > 0 && canvas.__logicalSize?.height > 0) {
-    return { ...canvas.__logicalSize }
+    return {
+      width: Number(canvas.__logicalSize.width),
+      height: Number(canvas.__logicalSize.height),
+    }
   }
   const z = clampZoom(canvas.getZoom() || 1)
   return {
