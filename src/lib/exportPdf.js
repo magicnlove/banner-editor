@@ -10,7 +10,7 @@ import {
   getLogicalSizeFromCanvas,
   isTemplateLayerObject,
   logTemplateCanvasMetrics,
-  syncCanvasToTemplateBounds,
+  fitTemplateToCanvas,
 } from './template'
 import {
   buildHtmlTextLayer,
@@ -86,7 +86,7 @@ ${fontFaceCss}
  */
 export async function exportFabricToPdf(canvas, customFonts = []) {
   if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
-    syncCanvasToTemplateBounds(canvas)
+    fitTemplateToCanvas(canvas)
   }
   const logical = getLogicalSizeFromCanvas(canvas)
   const width = logical.width

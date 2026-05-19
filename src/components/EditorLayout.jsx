@@ -70,8 +70,8 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
         <div className="flex min-h-0 min-w-0 flex-1">
           <ToolPanel />
           <FabricWorkspace
-            width={isFree ? canvasWidth : (templateViewBox?.width ?? canvasWidth)}
-            height={isFree ? canvasHeight : (templateViewBox?.height ?? canvasHeight)}
+            width={canvasWidth}
+            height={canvasHeight}
             isFree={isFree}
             templateSvgUrl={template?.url ?? null}
             templateSvgRaw={template?.raw ?? null}
@@ -82,7 +82,6 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
             canvasWidth={canvasWidth}
             canvasHeight={canvasHeight}
             onCanvasSizeChange={onCanvasSizeChange}
-            lockCanvasSize={!isFree}
             customFonts={customFonts}
             onCustomFont={onCustomFont}
           />

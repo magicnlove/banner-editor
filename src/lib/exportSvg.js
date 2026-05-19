@@ -7,7 +7,7 @@ import {
 import {
   getLogicalSizeFromCanvas,
   isTemplateLayerObject,
-  syncCanvasToTemplateBounds,
+  fitTemplateToCanvas,
 } from './template'
 
 /**
@@ -28,7 +28,7 @@ export async function exportFabricToSvg(
   const fontEmbedOpts = { notoOnly: true, ...embedOptions }
 
   if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
-    syncCanvasToTemplateBounds(canvas)
+    fitTemplateToCanvas(canvas)
   }
   const logical =
     logicalSize?.width > 0 && logicalSize?.height > 0

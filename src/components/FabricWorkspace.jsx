@@ -12,10 +12,7 @@ import {
   loadTemplateOntoCanvas,
   initBlankCanvas,
   resizeCanvasLogicalSize,
-  applyTemplateCanvasDimensions,
   logTemplateCanvasMetrics,
-  setCanvasLogicalSize,
-  syncCanvasToTemplateBounds,
 } from '../lib/template'
 import { placeObjectAtCanvasCenter } from '../lib/fabricPlacement'
 import { useEditor } from '../context/EditorContext'
@@ -35,10 +32,9 @@ import { attachCanvasTextOverlay } from '../lib/fabricTextOverlay'
 
 const ZOOM_BTN_FACTOR = 1.12
 
-/** viewBox 기준 논리 크기 (__logicalSize) */
 function logicalSizeOf(inst, width, height) {
   if (!inst) return { width, height }
-  return getLogicalSizeFromCanvas(inst)
+  return getLogicalSizeFromCanvas(inst, { width, height })
 }
 
 /** 편집 영역(중앙 패널) 실제 DOM 크기 */
@@ -134,13 +130,7 @@ export function FabricWorkspace({
       const vp = viewportRef.current
       if (!inst) return null
 
-      const logical = logicalSizeOf(inst, width, height)
-      const applied = applyDisplayZoom(
-        inst,
-        logical.width,
-        logical.height,
-        zoomLevel,
-      )
+      const applied = applyDisplayZoom(inst, zoomLevel)
       setZoomPct(zoomPercentFromZoom(applied))
 
       if (centerScroll && vp) {
@@ -222,12 +212,7 @@ export function FabricWorkspace({
       await ensureAppFontsReady()
       if (cancelled) return
 
-      let { width: w, height: h } = sizeRef.current
-      if (!isFree && templateViewBox) {
-        w = Math.max(1, templateViewBox.width)
-        h = Math.max(1, templateViewBox.height)
-        sizeRef.current = { width: w, height: h }
-      }
+      const { width: w, height: h } = sizeRef.current
       inst = new Canvas(el, {
         width: w,
         height: h,
@@ -235,11 +220,6 @@ export function FabricWorkspace({
         preserveObjectStacking: true,
       })
       fabricRef.current = inst
-      if (!isFree && templateViewBox) {
-        applyTemplateCanvasDimensions(inst, w, h, templateViewBox)
-      } else {
-        setCanvasLogicalSize(inst, w, h, 'FabricWorkspace:canvasInit')
-      }
 
       const onSelect = (e) => {
         const t = e?.selected?.[0] ?? e?.target ?? null
@@ -282,11 +262,6 @@ export function FabricWorkspace({
         if (cancelled) return
         sizeRef.current = { width: lw, height: lh }
         appliedCanvasSizeRef.current = { width: lw, height: lh }
-        if (!isFree) {
-          syncCanvasToTemplateBounds(inst)
-        } else {
-          applyTemplateCanvasDimensions(inst, lw, lh, viewBox)
-        }
         const logicalAfterLoad = getLogicalSizeFromCanvas(inst)
         lw = logicalAfterLoad.width
         lh = logicalAfterLoad.height
@@ -343,38 +318,20 @@ export function FabricWorkspace({
     const inst = fabricRef.current
     if (!inst || !canvasReadyRef.current || loading) return
 
-    const isTemplateCanvas = inst.getObjects().some((o) => isTemplateLayerObject(o))
-    const viewBox = inst.__viewBox
-
-    if (isTemplateCanvas && viewBox) {
-      syncCanvasToTemplateBounds(inst)
-      const logical = getLogicalSizeFromCanvas(inst)
-      sizeRef.current = logical
-      appliedCanvasSizeRef.current = logical
-      scheduleFit()
+    const prev = appliedCanvasSizeRef.current
+    if (
+      prev &&
+      Math.abs(prev.width - width) < 0.01 &&
+      Math.abs(prev.height - height) < 0.01
+    ) {
       return
     }
 
-    const prev = appliedCanvasSizeRef.current
-    const logical = getLogicalSizeFromCanvas(inst)
-    const propsChanged =
-      prev && (prev.width !== width || prev.height !== height)
-    const alreadyLogical =
-      Math.abs(logical.width - width) < 0.01 && Math.abs(logical.height - height) < 0.01
-
-    if (propsChanged && !alreadyLogical) {
-      resizeCanvasLogicalSize(inst, width, height)
-      sizeRef.current = { width, height }
-      scheduleFit()
-      bump()
-    } else if (propsChanged && alreadyLogical) {
-      sizeRef.current = { width, height }
-      applyTemplateCanvasDimensions(inst, logical.width, logical.height, inst.__viewBox)
-      scheduleFit()
-    }
-
-    appliedCanvasSizeRef.current = getLogicalSizeFromCanvas(inst)
-  }, [width, height, loading, scheduleFit, bump])
+    resizeCanvasLogicalSize(inst, width, height)
+    sizeRef.current = { width, height }
+    appliedCanvasSizeRef.current = { width, height }
+    scheduleFit()
+  }, [width, height, loading, scheduleFit])
 
   useEffect(() => {
     if (loading || loadError || !canvasReadyRef.current) return

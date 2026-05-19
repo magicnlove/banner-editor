@@ -19,7 +19,7 @@ import {
 import {
   getLogicalSizeFromCanvas,
   isTemplateLayerObject,
-  syncCanvasToTemplateBounds,
+  fitTemplateToCanvas,
 } from '../lib/template'
 import { exportFabricToPdf } from '../lib/exportPdf'
 import { exportCanvasToDataUrl } from '../lib/exportRaster'
@@ -154,11 +154,11 @@ export function EditorHeader({
       canvas.requestRenderAll()
 
       if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
-        syncCanvasToTemplateBounds(canvas)
+        fitTemplateToCanvas(canvas)
       }
       const logical = getLogicalSizeFromCanvas(canvas)
       const saved = prepareCanvasForExport(canvas)
-      resetCanvasToLogicalForExport(canvas, logical.width, logical.height)
+      resetCanvasToLogicalForExport(canvas)
 
       try {
         if (kind === 'pdf') {

@@ -1,7 +1,7 @@
-import { ensureCanvasLogicalSizeFromViewBox, getLogicalSizeFromCanvas } from './template'
+import { getLogicalSizeFromCanvas } from './template'
 
 /**
- * 줌: canvas.setZoom + setDimensions(논리×줌). 논리 크기는 __viewBox → __logicalSize 순.
+ * 화면 줌: __logicalSize는 고정, setZoom + DOM = 논리×줌
  */
 export const ZOOM_MIN = 0.1
 export const ZOOM_MAX = 3
@@ -12,35 +12,25 @@ export function clampZoom(z) {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z))
 }
 
-/** @param {import('fabric').Canvas} canvas @param {{ width?: number; height?: number }} [fallback] */
-export function getCanvasLogicalSize(canvas, fallback) {
-  return getLogicalSizeFromCanvas(canvas, fallback)
+/** @param {import('fabric').Canvas} canvas */
+export function getCanvasLogicalSize(canvas) {
+  return getLogicalSizeFromCanvas(canvas)
 }
 
 /**
- * DOM 표시 크기 = __logicalSize×줌. setZoom + setDimensions 동기화.
- * @returns {number} 적용된 줌 (0.1~3)
+ * @param {import('fabric').Canvas} canvas
+ * @param {number} zoom
+ * @returns {number} 적용된 줌
  */
-export function applyDisplayZoom(canvas, fallbackW, fallbackH, zoom) {
+export function applyDisplayZoom(canvas, zoom) {
   const z = clampZoom(zoom)
-  const viewBox = canvas.__viewBox
-  const logicalW = viewBox?.width ?? canvas.__logicalSize?.width ?? fallbackW
-  const logicalH = viewBox?.height ?? canvas.__logicalSize?.height ?? fallbackH
+  const { width: logicalW, height: logicalH } = getLogicalSizeFromCanvas(canvas)
 
   canvas.setZoom(z)
-  console.log('[applyDisplayZoom setDimensions]', {
-    logicalW,
-    logicalH,
-    viewBox: canvas.__viewBox,
-    logicalSize: canvas.__logicalSize,
-    finalW: logicalW * z,
-    finalH: logicalH * z,
-  })
   canvas.setDimensions({
     width: Math.round(logicalW * z),
     height: Math.round(logicalH * z),
   })
-  ensureCanvasLogicalSizeFromViewBox(canvas, 'applyDisplayZoom')
   canvas.calcOffset()
   canvas.requestRenderAll()
   return z
@@ -51,10 +41,9 @@ export function zoomPercentFromZoom(zoom) {
   return Math.round(clampZoom(zoom) * 100)
 }
 
-/** 현재 줌 유지하며 DOM 크기만 논리 크기에 맞춤 */
+/** @param {import('fabric').Canvas} canvas */
 export function syncCanvasDisplayZoom(canvas) {
-  const logical = getCanvasLogicalSize(canvas)
-  applyDisplayZoom(canvas, logical.width, logical.height, canvas.getZoom() || 1)
+  applyDisplayZoom(canvas, canvas.getZoom() || 1)
 }
 
 export function computeDisplaySize(
@@ -94,35 +83,35 @@ export function computeFitZoom(
 }
 
 export function logFitDebug(label, data) {
-  console.log(`[editor/fit] ${label}`, data)
+  if (import.meta.env.DEV) {
+    console.log(`[editor/fit] ${label}`, data)
+  }
 }
 
-export function applyFitToScreen(
-  canvas,
-  vw,
-  vh,
-  logicalW,
-  logicalH,
-  padding = FIT_VIEWPORT_PADDING,
-) {
-  const z = computeFitZoom(vw, vh, logicalW, logicalH, padding)
-  const applied = applyDisplayZoom(canvas, logicalW, logicalH, z)
+/**
+ * @param {import('fabric').Canvas} canvas
+ * @param {number} vw
+ * @param {number} vh
+ * @param {number} [padding]
+ */
+export function applyFitToScreen(canvas, vw, vh, padding = FIT_VIEWPORT_PADDING) {
+  const { width, height } = getLogicalSizeFromCanvas(canvas)
+  const z = computeFitZoom(vw, vh, width, height, padding)
+  const applied = applyDisplayZoom(canvas, z)
 
   logFitDebug('applyFitToScreen', {
     viewport: { vw, vh, padding },
-    logicalSize: { width: logicalW, height: logicalH },
+    logicalSize: { width, height },
     zoom: applied,
-    getZoom: canvas.getZoom(),
-    canvasWidth: canvas.getWidth(),
-    canvasHeight: canvas.getHeight(),
     __logicalSize: canvas.__logicalSize,
   })
 
   return applied
 }
 
-export function setUniformZoom(canvas, logicalW, logicalH, targetZoom) {
-  return applyDisplayZoom(canvas, logicalW, logicalH, targetZoom)
+/** @param {import('fabric').Canvas} canvas @param {number} targetZoom */
+export function setUniformZoom(canvas, targetZoom) {
+  return applyDisplayZoom(canvas, targetZoom)
 }
 
 export function zoomPercent(canvas) {
@@ -179,9 +168,9 @@ export function centerViewportScrollAndSyncFabric(
   centerViewportScroll(vp, canvas, innerW, innerH)
 }
 
-/**보내기 전 논리 해상도(줌 1)로 복원 */
+/** @param {import('fabric').Canvas} canvas */
 export function prepareCanvasForExport(canvas) {
-  const logical = getCanvasLogicalSize(canvas)
+  const logical = getLogicalSizeFromCanvas(canvas)
   return {
     logical,
     savedZoom: canvas.getZoom() || 1,
@@ -191,38 +180,20 @@ export function prepareCanvasForExport(canvas) {
   }
 }
 
+/** @param {import('fabric').Canvas} canvas @param {ReturnType<typeof prepareCanvasForExport>} saved */
 export function restoreCanvasAfterExport(canvas, saved) {
   canvas.setZoom(saved.savedZoom)
-  console.log('[setDimensions]', 'restoreCanvasAfterExport', {
-    width: saved.savedWidth,
-    height: saved.savedHeight,
-    zoom: saved.savedZoom,
-    __viewBox: canvas.__viewBox,
-    __logicalSize: canvas.__logicalSize,
-  })
   canvas.setDimensions({ width: saved.savedWidth, height: saved.savedHeight })
   canvas.setViewportTransform(saved.savedVp)
   canvas.calcOffset()
   canvas.requestRenderAll()
 }
 
-export function resetCanvasToLogicalForExport(canvas, logicalW, logicalH) {
-  const logical = getLogicalSizeFromCanvas(canvas, {
-    width: logicalW,
-    height: logicalH,
-  })
+/** @param {import('fabric').Canvas} canvas */
+export function resetCanvasToLogicalForExport(canvas) {
+  const { width, height } = getLogicalSizeFromCanvas(canvas)
   canvas.setZoom(1)
-  console.log('[setDimensions]', 'resetCanvasToLogicalForExport', {
-    width: logical.width,
-    height: logical.height,
-    zoom: 1,
-    passedW: logicalW,
-    passedH: logicalH,
-    __viewBox: canvas.__viewBox,
-    __logicalSize: canvas.__logicalSize,
-  })
-  canvas.setDimensions({ width: logical.width, height: logical.height })
-  ensureCanvasLogicalSizeFromViewBox(canvas, 'resetCanvasToLogicalForExport')
+  canvas.setDimensions({ width, height })
   canvas.setViewportTransform([1, 0, 0, 1, 0, 0])
   canvas.calcOffset()
   canvas.requestRenderAll()

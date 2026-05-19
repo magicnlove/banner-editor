@@ -1,12 +1,11 @@
 import {
   TEMPLATE_LAYER_PROP,
-  applyTemplateCanvasDimensions,
   cloneViewBox,
   getLogicalSizeFromCanvas,
   getTemplate,
   isTemplateLayerObject,
   parseViewBoxFromSvgString,
-  syncCanvasToTemplateBounds,
+  setCanvasDocumentSize,
 } from './template'
 
 export const WORK_STATE_VERSION = 1
@@ -116,18 +115,18 @@ export function loadWorkStateOntoCanvas(canvas, data) {
       ? /** @type {{ width?: number; height?: number }} */ (payload.viewBox)
       : null
   let width =
-    Number(savedViewBox?.width) > 0
-      ? Number(savedViewBox.width)
-      : Number(logicalSize?.width) > 0
-        ? Number(logicalSize.width)
+    Number(logicalSize?.width) > 0
+      ? Number(logicalSize.width)
+      : Number(savedViewBox?.width) > 0
+        ? Number(savedViewBox.width)
         : Number(payload.width) > 0
           ? Number(payload.width)
           : null
   let height =
-    Number(savedViewBox?.height) > 0
-      ? Number(savedViewBox.height)
-      : Number(logicalSize?.height) > 0
-        ? Number(logicalSize.height)
+    Number(logicalSize?.height) > 0
+      ? Number(logicalSize.height)
+      : Number(savedViewBox?.height) > 0
+        ? Number(savedViewBox.height)
         : Number(payload.height) > 0
           ? Number(payload.height)
           : null
@@ -151,7 +150,6 @@ export function loadWorkStateOntoCanvas(canvas, data) {
               )
             : { minX: 0, minY: 0, width, height }
 
-        canvas.setZoom(1)
         reapplyTemplateLayerMarkers(canvas)
 
         if (editorConfig?.type === 'template' && editorConfig.templateKey) {
@@ -164,18 +162,16 @@ export function loadWorkStateOntoCanvas(canvas, data) {
           } catch {
             canvas.__viewBox = cloneViewBox(viewBox)
           }
-          syncCanvasToTemplateBounds(canvas)
-        } else {
-          applyTemplateCanvasDimensions(canvas, width, height, viewBox)
         }
 
-        const logicalSize = getLogicalSizeFromCanvas(canvas)
+        setCanvasDocumentSize(canvas, width, height, viewBox)
+
+        const resolvedLogical = getLogicalSizeFromCanvas(canvas)
         canvas.discardActiveObject()
-        canvas.calcOffset()
         canvas.requestRenderAll()
 
         resolve({
-          logicalSize,
+          logicalSize: resolvedLogical,
           editorConfig,
           workName: String(payload.workName || ''),
         })
