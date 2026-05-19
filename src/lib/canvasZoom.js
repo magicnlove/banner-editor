@@ -210,3 +210,16 @@ export function resetCanvasToLogicalForExport(canvas) {
   canvas.calcOffset()
   canvas.requestRenderAll()
 }
+
+/**
+ * PDF 등: __logicalSize 기준으로 Fabric 버퍼 크기만 동기화 (줌·뷰포트·템플릿 유지)
+ * @param {import('fabric').Canvas} canvas
+ */
+export function resetCanvasDimensionsToLogicalForExport(canvas) {
+  const { width, height } = getLogicalSizeFromCanvas(canvas)
+  canvas.setDimensions({
+    width: Math.round(width),
+    height: Math.round(height),
+  })
+  canvas.calcOffset()
+}

@@ -177,7 +177,7 @@ export function EditorHeader({
         if (kind === 'pdf') {
           try {
             const blob = await exportFabricToPdf(canvas, customFonts, {
-              onAfterRestore: fitToScreen,
+              scheduleFit: fitToScreen,
             })
             downloadBlob(blob, 'banner.pdf')
           } catch (err) {

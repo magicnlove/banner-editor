@@ -4,10 +4,8 @@
 import { collectUsedFontsForPdfApi } from './exportFonts'
 import { exportFabricToSvg } from './exportSvg'
 import {
-  getLogicalSizeFromCanvas,
   isTemplateLayerObject,
   logTemplateCanvasMetrics,
-  fitTemplateToCanvas,
   captureTemplateTransform,
   restoreTemplateTransform,
 } from './template'
@@ -18,7 +16,7 @@ import {
 } from './exportPdfHtmlText'
 import {
   prepareCanvasForExport,
-  resetCanvasToLogicalForExport,
+  resetCanvasDimensionsToLogicalForExport,
   restoreCanvasAfterExport,
 } from './canvasZoom'
 
@@ -58,6 +56,8 @@ function restoreFullPdfExportState(canvas, saved) {
  * @param {string} textLayerHtml
  */
 function buildPdfHtmlDocument(width, height, svgInner, textLayerHtml) {
+  const w = Math.round(width)
+  const h = Math.round(height)
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -65,14 +65,14 @@ function buildPdfHtmlDocument(width, height, svgInner, textLayerHtml) {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
-      width: ${width}px;
-      height: ${height}px;
+      width: ${w}px;
+      height: ${h}px;
       overflow: hidden;
     }
     .pdf-canvas {
       position: relative;
-      width: ${width}px;
-      height: ${height}px;
+      width: ${w}px;
+      height: ${h}px;
       font-family: 'Noto Sans KR', sans-serif;
     }
     .pdf-canvas > svg {
@@ -80,8 +80,8 @@ function buildPdfHtmlDocument(width, height, svgInner, textLayerHtml) {
       left: 0;
       top: 0;
       display: block;
-      width: ${width}px;
-      height: ${height}px;
+      width: ${w}px;
+      height: ${h}px;
     }
     .pdf-text-layer {
       position: absolute;
@@ -109,22 +109,21 @@ function buildPdfHtmlDocument(width, height, svgInner, textLayerHtml) {
 /**
  * @param {import('fabric').Canvas} canvas
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
- * @param {{ onAfterRestore?: () => void | Promise<void> }} [options]
+ * @param {{ scheduleFit?: () => void | Promise<void> }} [options]
  * @returns {Promise<Blob>}
  */
 export async function exportFabricToPdf(canvas, customFonts = [], options = {}) {
   const saved = prepareFullPdfExportState(canvas)
-  resetCanvasToLogicalForExport(canvas)
+  const logical = {
+    width: saved.logical.width,
+    height: saved.logical.height,
+  }
+  const width = logical.width
+  const height = logical.height
+
+  resetCanvasDimensionsToLogicalForExport(canvas)
 
   try {
-    if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
-      fitTemplateToCanvas(canvas)
-    }
-
-    const logical = getLogicalSizeFromCanvas(canvas)
-    const width = logical.width
-    const height = logical.height
-
     const templateObj = canvas.getObjects().find((o) => isTemplateLayerObject(o))
     logTemplateCanvasMetrics(canvas, templateObj, 'before PDF export')
 
@@ -148,9 +147,11 @@ export async function exportFabricToPdf(canvas, customFonts = [], options = {}) 
         customFonts,
         logical,
         { notoOnly: false },
-        { embedFonts: false },
+        { embedFonts: false, skipTemplateFit: true },
       ),
     )
+
+    canvas.requestRenderAll()
 
     const html = buildPdfHtmlDocument(width, height, svgInner, textLayerHtml)
 
@@ -182,6 +183,9 @@ export async function exportFabricToPdf(canvas, customFonts = [], options = {}) 
   } finally {
     restoreFullPdfExportState(canvas, saved)
     canvas.requestRenderAll()
-    await options.onAfterRestore?.()
+    await new Promise((r) =>
+      requestAnimationFrame(() => requestAnimationFrame(r)),
+    )
+    await options.scheduleFit?.()
   }
 }

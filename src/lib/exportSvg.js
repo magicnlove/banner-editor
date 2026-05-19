@@ -15,7 +15,7 @@ import {
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
  * @param {{ width: number; height: number }} [logicalSize] —보내기 시 논리 크기(줌 1)
  * @param {{ notoOnly?: boolean }} [embedOptions] — 로컬 woff2 @font-face
- * @param {{ embedFonts?: boolean }} [options]
+ * @param {{ embedFonts?: boolean; skipTemplateFit?: boolean }} [options]
  */
 export async function exportFabricToSvg(
   canvas,
@@ -24,10 +24,13 @@ export async function exportFabricToSvg(
   embedOptions = { notoOnly: true },
   options = {},
 ) {
-  const { embedFonts = true } = options
+  const { embedFonts = true, skipTemplateFit = false } = options
   const fontEmbedOpts = { notoOnly: true, ...embedOptions }
 
-  if (canvas.getObjects().some((o) => isTemplateLayerObject(o))) {
+  if (
+    !skipTemplateFit &&
+    canvas.getObjects().some((o) => isTemplateLayerObject(o))
+  ) {
     fitTemplateToCanvas(canvas)
   }
   const logical =
