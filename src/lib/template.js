@@ -63,7 +63,7 @@ export function preserveLogicalPx(value) {
 export function setCanvasLogicalSize(canvas, width, height, source = 'unknown') {
   const w = preserveLogicalPx(width)
   const h = preserveLogicalPx(height)
-  console.log('[logicalSize set]', source, w, h)
+  console.log('[logicalSize set DIRECT]', source, w, h, new Error().stack)
   canvas.__logicalSize = { width: w, height: h }
 }
 
@@ -284,6 +284,7 @@ export function logTemplateCanvasMetrics(canvas, templateGroup, label = 'templat
  * @param {{ minX?: number; minY?: number; width?: number; height?: number }} [viewBox]
  */
 export function applyTemplateCanvasDimensions(canvas, width, height, viewBox) {
+  console.log('[applyTemplate START]', width, height, viewBox)
   let w
   let h
   if (viewBox?.width > 0 && viewBox?.height > 0) {
@@ -319,6 +320,7 @@ export function syncCanvasToTemplateBounds(canvas) {
  * @param {string} [svgRaw]
  */
 export async function loadTemplateOntoCanvas(canvas, svgUrl, svgRaw) {
+  console.log('[loadTemplate START]')
   if (!svgRaw) {
     throw new Error('SVG raw string required for viewBox parsing')
   }
