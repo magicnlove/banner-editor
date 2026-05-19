@@ -4,6 +4,11 @@ import { loadServerFontsForFamilies } from './pdfFonts.js'
 
 chromium.setGraphicsMode = false
 
+/** 96 CSS px → mm (print/PDF) */
+function pxToMm(px) {
+  return (px * 25.4) / 96
+}
+
 function escapeCssFontFamily(family) {
   return String(family).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
 }
@@ -130,8 +135,8 @@ export default async function handler(req, res) {
     console.log('PDF size:', pdfW, pdfH, 'logical:', width, height)
 
     const pdf = await page.pdf({
-      width: `${pdfW}px`,
-      height: `${pdfH}px`,
+      width: `${pxToMm(pdfW)}mm`,
+      height: `${pxToMm(pdfH)}mm`,
       printBackground: true,
       tagged: true,
     })
