@@ -40,13 +40,29 @@ function buildFontFaceCss(fonts) {
 }
 
 /**
- * @param {string} html
- * @param {string} fontFaceCss
+ * @param {number} width
+ * @param {number} height
  */
-function embedFontsInHtml(html, fontFaceCss) {
-  if (!fontFaceCss) return html
+function buildPdfLayoutCss(width, height) {
+  const w = Math.round(width)
+  const h = Math.round(height)
+  return `* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: ${w}px;
+  height: ${h}px;
+  overflow: hidden;
+}
+svg { display: block; }`
+}
 
-  const styleBlock = `<style>\n${fontFaceCss}\n</style>`
+/**
+ * @param {string} html
+ * @param {string} css
+ */
+function embedStylesInHtml(html, css) {
+  if (!css?.trim()) return html
+
+  const styleBlock = `<style>\n${css}\n</style>`
 
   if (/<head[^>]*>/i.test(html)) {
     return html.replace(/<head[^>]*>/i, (match) => `${match}\n${styleBlock}`)
@@ -102,12 +118,16 @@ export default async function handler(req, res) {
     const fontFamilies = Array.isArray(usedFonts) ? usedFonts : ['Noto Sans KR']
     const allFonts = resolvePdfFonts(fontFamilies, customFonts)
     const fontFaceCss = buildFontFaceCss(allFonts)
-    const htmlWithFonts = embedFontsInHtml(html, fontFaceCss)
+    const layoutCss = buildPdfLayoutCss(pdfW, pdfH)
+    const htmlPrepared = embedStylesInHtml(
+      html,
+      [layoutCss, fontFaceCss].filter(Boolean).join('\n\n'),
+    )
 
     console.log('usedFonts:', fontFamilies)
     console.log('server + custom font rules:', allFonts.length)
     console.log('font-face rules length:', fontFaceCss.length)
-    console.log('html length:', htmlWithFonts.length)
+    console.log('html length:', htmlPrepared.length)
 
     browser = await puppeteer.launch({
       args: chromium.args,
@@ -123,7 +143,7 @@ export default async function handler(req, res) {
       deviceScaleFactor: 1,
     })
 
-    await page.setContent(htmlWithFonts, {
+    await page.setContent(htmlPrepared, {
       waitUntil: 'networkidle0',
       timeout: 30_000,
     })
