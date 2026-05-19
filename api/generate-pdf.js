@@ -1,5 +1,6 @@
 import chromium from '@sparticuz/chromium'
 import puppeteer from 'puppeteer-core'
+import { loadServerFontsForFamilies } from './pdfFonts.js'
 
 chromium.setGraphicsMode = false
 
@@ -56,6 +57,16 @@ function embedFontsInHtml(html, fontFaceCss) {
 </html>`
 }
 
+/**
+ * @param {string[]} usedFonts
+ * @param {Array<{ family?: string; weight?: string; base64?: string; format?: string }>} customFonts
+ */
+function resolvePdfFonts(usedFonts, customFonts) {
+  const serverFonts = loadServerFontsForFamilies(usedFonts)
+  const uploaded = Array.isArray(customFonts) ? customFonts : []
+  return [...serverFonts, ...uploaded]
+}
+
 /** Vercel serverless: HTML → PDF (Puppeteer + Chromium) */
 export default async function handler(req, res) {
   console.log('=== PDF API called ===')
@@ -69,7 +80,7 @@ export default async function handler(req, res) {
 
   let browser
   try {
-    const { html, width, height, fonts } = req.body ?? {}
+    const { html, width, height, usedFonts, fonts: customFonts } = req.body ?? {}
 
     if (!html || typeof html !== 'string') {
       return res.status(400).json({ error: 'html is required' })
@@ -81,10 +92,15 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'width and height must be positive numbers' })
     }
 
-    const fontFaceCss = buildFontFaceCss(fonts)
+    const fontFamilies = Array.isArray(usedFonts) ? usedFonts : []
+    const allFonts = resolvePdfFonts(fontFamilies, customFonts)
+    const fontFaceCss = buildFontFaceCss(allFonts)
     const htmlWithFonts = embedFontsInHtml(html, fontFaceCss)
-    console.log('fonts count:', Array.isArray(fonts) ? fonts.length : 0)
+
+    console.log('usedFonts:', fontFamilies)
+    console.log('server + custom font rules:', allFonts.length)
     console.log('font-face rules length:', fontFaceCss.length)
+    console.log('html length:', htmlWithFonts.length)
 
     console.log('launching browser...')
     browser = await puppeteer.launch({
@@ -107,7 +123,6 @@ export default async function handler(req, res) {
 
     const pdfTextDivCount = (htmlWithFonts.match(/class="pdf-text"/g) || []).length
     const hasPdfTextLayer = htmlWithFonts.includes('pdf-text-layer')
-    console.log('html length:', htmlWithFonts.length)
     console.log('pdf-text div count:', pdfTextDivCount)
     console.log('has pdf-text-layer:', hasPdfTextLayer)
     if (pdfTextDivCount === 0) {

@@ -4,8 +4,14 @@
 
 import notoSansKrRegularWoff2 from '../assets/fonts/NotoSansKR-Regular.woff2?url'
 import notoSansKrSemiBoldWoff2 from '../assets/fonts/NotoSansKR-SemiBold.woff2?url'
-import { BUNDLED_FONT_URL_BY_FAMILY } from './bundledFonts'
+import { BUNDLED_FONT_FAMILY_NAMES, BUNDLED_FONT_URL_BY_FAMILY } from './bundledFonts'
 import { loadCanvasTextFontsAndRender } from './appFonts'
+
+/** PDF API 서버(api/fonts)에서 제공하는 번들 폰트 */
+export const SERVER_PDF_FONT_FAMILIES = new Set([
+  'Noto Sans KR',
+  ...BUNDLED_FONT_FAMILY_NAMES,
+])
 
 /**
  * 로컬 번들 폰트 (src/assets/fonts, Vite ?url)
@@ -608,7 +614,81 @@ export function buildPdfFontFaceCss(fonts) {
 }
 
 /**
- * Puppeteer PDF API용 폰트 base64 (로컬 woff2 + 업로드 커스텀 폰트만)
+ * PDF API 요청용 — 번들 폰트는 family 이름만, 업로드 폰트만 base64
+ * @param {import('fabric').Canvas} canvas
+ * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
+ * @returns {{ usedFonts: string[]; customFonts: PdfFontPayload[] }}
+ */
+export function collectUsedFontsForPdfApi(canvas, customFonts = []) {
+  const usedFonts = new Set()
+  const families = canvas ? collectFontFamiliesFromCanvas(canvas) : []
+
+  for (const fam of families) {
+    const resolved = resolveExportFontFamily(fam)
+    if (SERVER_PDF_FONT_FAMILIES.has(resolved)) {
+      usedFonts.add(resolved)
+    }
+  }
+
+  if (usedFonts.size === 0) {
+    usedFonts.add('Noto Sans KR')
+  }
+
+  /** @type {PdfFontPayload[]} */
+  const customPayloads = []
+  const embeddedCustom = new Set()
+
+  for (const fam of families) {
+    const resolved = resolveExportFontFamily(fam)
+    if (SERVER_PDF_FONT_FAMILIES.has(resolved)) continue
+
+    const entry = customFonts.find(
+      (c) => c?.family === fam || c?.family === resolved,
+    )
+    if (!entry?.fileData || embeddedCustom.has(entry.family)) continue
+
+    embeddedCustom.add(entry.family)
+    const base64 = arrayBufferToBase64(entry.fileData)
+    customPayloads.push({
+      family: entry.family,
+      weight: 'normal',
+      base64,
+      format: 'truetype',
+    })
+    customPayloads.push({
+      family: entry.family,
+      weight: 'bold',
+      base64,
+      format: 'truetype',
+    })
+  }
+
+  for (const entry of customFonts) {
+    if (!entry?.family || !entry?.fileData) continue
+    if (SERVER_PDF_FONT_FAMILIES.has(entry.family) || embeddedCustom.has(entry.family)) {
+      continue
+    }
+    embeddedCustom.add(entry.family)
+    const base64 = arrayBufferToBase64(entry.fileData)
+    customPayloads.push({
+      family: entry.family,
+      weight: 'normal',
+      base64,
+      format: 'truetype',
+    })
+    customPayloads.push({
+      family: entry.family,
+      weight: 'bold',
+      base64,
+      format: 'truetype',
+    })
+  }
+
+  return { usedFonts: [...usedFonts], customFonts: customPayloads }
+}
+
+/**
+ * @deprecated collectUsedFontsForPdfApi 사용 (로컬/테스트용)
  * @param {import('fabric').Canvas} _canvas
  * @param {Array<{ family: string; fileData?: ArrayBuffer }>} [customFonts]
  * @returns {Promise<PdfFontPayload[]>}

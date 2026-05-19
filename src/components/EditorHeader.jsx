@@ -172,7 +172,7 @@ export function EditorHeader({
       try {
         if (kind === 'pdf') {
           try {
-            const blob = await exportFabricToPdf(canvas, customFonts)
+            const blob = await exportFabricToPdf(canvas, customFonts, { saved })
             downloadBlob(blob, 'banner.pdf')
           } catch (err) {
             console.error(err)
