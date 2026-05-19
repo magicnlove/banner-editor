@@ -251,6 +251,15 @@ export function fitTemplateGroupToCanvas(group, canvasWidth, canvasHeight) {
   group.setCoords()
 }
 
+/** @param {import('fabric').Canvas} canvas */
+export function fitTemplateToCanvas(canvas) {
+  const template = canvas.getObjects().find((o) => isTemplateLayerObject(o))
+  if (!template) return null
+  const { width, height } = getLogicalSizeFromCanvas(canvas)
+  fitTemplateGroupToCanvas(template, width, height)
+  return { width, height }
+}
+
 /**
  * 논리 캔버스 크기 변경 — 모든 오브젝트 동일 비율 스케일 + 템플릿 재맞춤
  * @param {import('fabric').Canvas} canvas
