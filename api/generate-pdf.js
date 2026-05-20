@@ -161,7 +161,9 @@ export default async function handler(req, res) {
     console.log('usedFonts:', fontFamilies)
     console.log('server + custom font rules:', allFonts.length)
     console.log('font-face rules length:', fontFaceCss.length)
-    console.log('html length:', htmlPrepared.length)
+    const finalHtml = htmlPrepared
+    console.log('html length:', finalHtml.length)
+    console.log('HTML preview:', finalHtml.substring(0, 500))
 
     browser = await puppeteer.launch({
       args: chromium.args,
@@ -177,7 +179,7 @@ export default async function handler(req, res) {
       deviceScaleFactor: 1,
     })
 
-    await page.setContent(htmlPrepared, {
+    await page.setContent(finalHtml, {
       waitUntil: 'networkidle0',
       timeout: 30_000,
     })
