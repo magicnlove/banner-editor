@@ -48,11 +48,44 @@ function buildPdfLayoutCss(width, height) {
   const h = Math.round(height)
   return `* { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
+  margin: 0;
+  padding: 0;
   width: ${w}px;
   height: ${h}px;
   overflow: hidden;
 }
-svg { display: block; }`
+body > svg,
+.pdf-canvas > svg,
+svg {
+  display: block;
+  width: ${w}px;
+  height: ${h}px;
+}
+.pdf-canvas {
+  position: relative;
+  width: ${w}px;
+  height: ${h}px;
+  overflow: hidden;
+}`
+}
+
+/**
+ * 본문 SVG 루트에 PDF 페이지 크기(width/height) 명시
+ * @param {string} html
+ * @param {number} pdfW
+ * @param {number} pdfH
+ */
+function applyPdfSvgDimensions(html, pdfW, pdfH) {
+  const w = Math.round(pdfW)
+  const h = Math.round(pdfH)
+  let applied = false
+
+  return html.replace(/<svg\b([^>]*)>/gi, (match, attrs) => {
+    if (applied) return match
+    applied = true
+    const cleaned = attrs.replace(/\s(width|height)=["'][^"']*["']/gi, '')
+    return `<svg${cleaned} width="${w}" height="${h}">`
+  })
 }
 
 /**
@@ -119,8 +152,9 @@ export default async function handler(req, res) {
     const allFonts = resolvePdfFonts(fontFamilies, customFonts)
     const fontFaceCss = buildFontFaceCss(allFonts)
     const layoutCss = buildPdfLayoutCss(pdfW, pdfH)
+    const htmlWithSvgSize = applyPdfSvgDimensions(html, pdfW, pdfH)
     const htmlPrepared = embedStylesInHtml(
-      html,
+      htmlWithSvgSize,
       [layoutCss, fontFaceCss].filter(Boolean).join('\n\n'),
     )
 
