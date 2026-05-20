@@ -30,6 +30,15 @@ import {
 import { ensureAppFontsReady, loadCanvasTextFontsAndRender } from '../lib/appFonts'
 import { attachCanvasTextOverlay } from '../lib/fabricTextOverlay'
 import { attachCanvasHistory } from '../lib/canvasHistory'
+import {
+  GUIDE_SNAP_THRESHOLD_PX,
+  snapObjectToGuides,
+} from '../lib/guideSnap'
+import { useWorkspaceOverlay } from '../context/WorkspaceOverlayContext'
+import { useFabricCanvasMetrics } from '../hooks/useFabricCanvasMetrics'
+import { RulerStrip, RULER_STRIP_SIZE } from './canvas-overlay/RulerStrip'
+import { CanvasGridLayer } from './canvas-overlay/CanvasGridLayer'
+import { CanvasGuidesLayer } from './canvas-overlay/CanvasGuidesLayer'
 
 const ZOOM_BTN_FACTOR = 1.12
 
@@ -78,6 +87,29 @@ export function FabricWorkspace({
     registerHistory,
     syncHistoryState,
   } = useEditor()
+
+  const {
+    rulersVisible,
+    gridVisible,
+    guidesVisible,
+    gridSpacingPx,
+    rulerUnit,
+    guides,
+    previewGuide,
+    addGuide,
+    setGuidesVisible,
+    setPreviewGuide,
+    layoutTick,
+    bumpLayout,
+  } = useWorkspaceOverlay()
+
+  const [fabricCanvas, setFabricCanvas] = useState(
+    /** @type {import('fabric').Canvas | null} */ (null),
+  )
+  const guidesRef = useRef(guides)
+  guidesRef.current = guides
+  const guidesVisibleRef = useRef(guidesVisible)
+  guidesVisibleRef.current = guidesVisible
 
   useLayoutEffect(() => {
     sizeRef.current = { width, height }
@@ -144,10 +176,50 @@ export function FabricWorkspace({
         pushScrollSurface(vp, inst)
       }
       bump()
+      bumpLayout()
       return applied
     },
-    [width, height, bump, syncScrollCentered, pushScrollSurface],
+    [width, height, bump, bumpLayout, syncScrollCentered, pushScrollSurface],
   )
+
+  const overlayMetrics = useFabricCanvasMetrics(
+    fabricCanvas,
+    viewportRef,
+    hostRef,
+    width,
+    height,
+    layoutTick,
+  )
+
+  const handlePreviewGuideFromRuler = useCallback(
+    (orientation, logicalPos) => {
+      setPreviewGuide({
+        id: '__preview__',
+        orientation,
+        position: logicalPos,
+      })
+    },
+    [setPreviewGuide],
+  )
+
+  const handleClearGuidePreview = useCallback(() => {
+    setPreviewGuide(null)
+  }, [setPreviewGuide])
+
+  const handleCreateGuideFromRuler = useCallback(
+    (orientation, logicalPos) => {
+      setGuidesVisible(true)
+      const pos = Math.max(0, logicalPos)
+      if (orientation === 'vertical') {
+        addGuide('vertical', Math.min(width, pos))
+      } else {
+        addGuide('horizontal', Math.min(height, pos))
+      }
+    },
+    [setGuidesVisible, addGuide, width, height],
+  )
+
+  const rulerGuidesEnabled = rulersVisible && guidesVisible
 
   const scheduleFit = useCallback(() => {
     const c = fabricRef.current
@@ -233,6 +305,7 @@ export function FabricWorkspace({
         afterGetHeight: inst.getHeight(),
       })
       fabricRef.current = inst
+      setFabricCanvas(inst)
 
       const onSelect = (e) => {
         const t = e?.selected?.[0] ?? e?.target ?? null
@@ -246,6 +319,17 @@ export function FabricWorkspace({
       inst.on('object:modified', dirty)
       inst.on('object:added', dirty)
       inst.on('object:removed', dirty)
+
+      inst.on('object:moving', (e) => {
+        if (!guidesVisibleRef.current || !guidesRef.current.length) return
+        const target = e.target
+        if (!target || isTemplateLayerObject(target)) return
+        const z = inst.getZoom() || 1
+        const threshold = GUIDE_SNAP_THRESHOLD_PX / z
+        if (snapObjectToGuides(target, guidesRef.current, threshold)) {
+          inst.requestRenderAll()
+        }
+      })
 
       attachCanvasTextOverlay(inst)
 
@@ -320,6 +404,7 @@ export function FabricWorkspace({
         inst.dispose()
         fabricRef.current = null
         registerCanvas(null)
+        setFabricCanvas(null)
         setSelected(null)
       }
     }
@@ -517,17 +602,70 @@ export function FabricWorkspace({
           <p className="text-center text-sm text-red-600">{loadError}</p>
         </div>
       )}
-      <div
-        ref={viewportRef}
-        className="fabric-viewport fabric-scroll-host fabric-canvas-wrap relative min-h-0 min-w-0 w-full flex-1 overflow-x-auto overflow-y-auto p-4 pb-20"
-        title="휠: 이동 · Ctrl+휠: 줌 · 가운데 버튼 드래그: 이동 · 스크롤바: 잘린 영역 이동"
-      >
+      <div className="flex min-h-0 min-w-0 flex-1">
+        {rulersVisible && (
+          <div
+            className="flex shrink-0 flex-col border-r border-[#d5dae3] bg-[#f0f2f6]"
+            style={{ width: RULER_STRIP_SIZE }}
+          >
+            <div
+              className="shrink-0 border-b border-[#d5dae3] bg-[#e8eaef]"
+              style={{ width: RULER_STRIP_SIZE, height: RULER_STRIP_SIZE }}
+            />
+            {overlayMetrics && (
+              <RulerStrip
+                orientation="vertical"
+                metrics={overlayMetrics}
+                unit={rulerUnit}
+                enabled={rulerGuidesEnabled}
+                onPreviewGuide={handlePreviewGuideFromRuler}
+                onClearPreview={handleClearGuidePreview}
+                onCreateGuide={handleCreateGuideFromRuler}
+              />
+            )}
+          </div>
+        )}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {rulersVisible && overlayMetrics && (
+            <RulerStrip
+              orientation="horizontal"
+              metrics={overlayMetrics}
+              unit={rulerUnit}
+              enabled={rulerGuidesEnabled}
+              onPreviewGuide={handlePreviewGuideFromRuler}
+              onClearPreview={handleClearGuidePreview}
+              onCreateGuide={handleCreateGuideFromRuler}
+            />
+          )}
+          <div
+            ref={viewportRef}
+            className="fabric-viewport fabric-scroll-host fabric-canvas-wrap relative min-h-0 min-w-0 w-full flex-1 overflow-x-auto overflow-y-auto p-4 pb-20"
+            title="휠: 이동 · Ctrl+휠: 줌 · 가운데 버튼 드래그: 이동 · 눈금자 드래그: 안내선"
+          >
         <div
           ref={innerSizerRef}
           className="box-border flex h-fit w-fit items-center justify-center"
         >
-          {/* 크기는 Fabric setDimensions만 사용 (style/height 속성 없음) */}
-          <canvas ref={hostRef} className="block shrink-0" />
+          <div className="relative inline-block leading-[0]">
+            <canvas ref={hostRef} className="block shrink-0" />
+            {overlayMetrics && gridVisible && (
+              <CanvasGridLayer
+                spacingPx={gridSpacingPx}
+                width={overlayMetrics.displayW}
+                height={overlayMetrics.displayH}
+              />
+            )}
+            {overlayMetrics && (
+              <CanvasGuidesLayer
+                guides={guides}
+                metrics={overlayMetrics}
+                visible={guidesVisible}
+                previewGuide={previewGuide}
+              />
+            )}
+          </div>
+        </div>
+          </div>
         </div>
       </div>
       <CanvasZoomBar

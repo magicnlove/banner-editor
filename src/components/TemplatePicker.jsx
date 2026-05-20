@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import logo from '../assets/logo.png'
-import { cmInputToPx } from '../lib/units'
+import { CANVAS_MAX_CM, CANVAS_MIN_CM, cmInputToPx } from '../lib/units'
 
 const HANWHA_CARDS = [
   {
@@ -18,8 +18,8 @@ const HANWHA_CARDS = [
 
 const FREE_DEFAULT_W_CM = '30'
 const FREE_DEFAULT_H_CM = '20'
-const FREE_MIN_CM = 1
-const FREE_MAX_CM = 200
+const FREE_MIN_CM = CANVAS_MIN_CM
+const FREE_MAX_CM = CANVAS_MAX_CM
 
 export function TemplatePicker({ onSelect }) {
   const [freeW, setFreeW] = useState(FREE_DEFAULT_W_CM)

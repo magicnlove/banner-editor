@@ -1,12 +1,18 @@
 import { useMemo, useState, useCallback } from 'react'
 import { EditorProvider } from '../context/EditorContext'
+import { WorkspaceOverlayProvider } from '../context/WorkspaceOverlayContext'
+import { EditorCanvasToolbar } from './EditorCanvasToolbar'
 import { getTemplate, parseViewBoxFromSvgString } from '../lib/template'
 import { FabricWorkspace } from './FabricWorkspace'
 import { ToolPanel } from './ToolPanel'
 import { PropertiesPanel } from './PropertiesPanel'
 import { EditorHeader } from './EditorHeader'
 import { EditorDirtyBridge } from './EditorDirtyBridge'
-import { cmToPx } from '../lib/units'
+import {
+  CANVAS_SIZE_MAX_PX,
+  CANVAS_SIZE_MIN_PX,
+  cmToPx,
+} from '../lib/units'
 
 /** @param {{ config: import('../lib/template').EditorConfig, onHome: () => void, onDirtyChange?: (dirty: boolean) => void }} props */
 export function EditorLayout({ config, onHome, onDirtyChange }) {
@@ -44,8 +50,14 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
   }, [])
 
   const onCanvasSizeChange = useCallback((w, h) => {
-    const nw = Math.min(8000, Math.max(38, Number(w) || 38))
-    const nh = Math.min(8000, Math.max(38, Number(h) || 38))
+    const nw = Math.min(
+      CANVAS_SIZE_MAX_PX,
+      Math.max(CANVAS_SIZE_MIN_PX, Number(w) || CANVAS_SIZE_MIN_PX),
+    )
+    const nh = Math.min(
+      CANVAS_SIZE_MAX_PX,
+      Math.max(CANVAS_SIZE_MIN_PX, Number(h) || CANVAS_SIZE_MIN_PX),
+    )
     setCanvasWidth(nw)
     setCanvasHeight(nh)
   }, [])
@@ -56,9 +68,10 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
 
   return (
     <EditorProvider>
-      <EditorDirtyBridge onDirtyChange={onDirtyChange} />
-      <div className="flex h-full min-h-0 flex-col bg-[#f6f7f9]">
-        <EditorHeader
+      <WorkspaceOverlayProvider>
+        <EditorDirtyBridge onDirtyChange={onDirtyChange} />
+        <div className="flex h-full min-h-0 flex-col bg-[#f6f7f9]">
+          <EditorHeader
           onHome={onHome}
           customFonts={customFonts}
           editorConfig={config}
@@ -67,7 +80,8 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
             setCanvasHeight(logicalSize.height)
           }}
         />
-        <div className="flex min-h-0 min-w-0 flex-1">
+          <EditorCanvasToolbar />
+          <div className="flex min-h-0 min-w-0 flex-1">
           <ToolPanel />
           <FabricWorkspace
             width={canvasWidth}
@@ -85,8 +99,9 @@ export function EditorLayout({ config, onHome, onDirtyChange }) {
             customFonts={customFonts}
             onCustomFont={onCustomFont}
           />
+          </div>
         </div>
-      </div>
+      </WorkspaceOverlayProvider>
     </EditorProvider>
   )
 }

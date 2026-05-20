@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react'
 import { ChevronDown, ChevronUp, Lock, Unlock } from 'lucide-react'
 import {
+  CANVAS_SIZE_MAX_PX,
+  CANVAS_SIZE_MIN_PX,
   PX_PER_CM,
   cmInputToPx,
   formatCmFromPx,
@@ -42,8 +44,8 @@ export function DimensionSizeFields({
   aspectLocked,
   onAspectLockedChange,
   onChange,
-  min = 38,
-  max = 8000,
+  min = CANVAS_SIZE_MIN_PX,
+  max = CANVAS_SIZE_MAX_PX,
   disabled = false,
 }) {
   const [editingW, setEditingW] = useState(false)

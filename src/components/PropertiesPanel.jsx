@@ -20,6 +20,8 @@ import { applyTextToFabricObject } from '../lib/fabricTextSync'
 import { setObjectScaledSizeCentered } from '../lib/fabricPlacement'
 import { getLineLengthPx, setLineLengthPx } from '../lib/fabricTools'
 import {
+  CANVAS_SIZE_MAX_PX,
+  CANVAS_SIZE_MIN_PX,
   cmInputToPx,
   cmInputToPxFloat,
   cmToPx,
@@ -51,12 +53,12 @@ const BASE_FONTS = [
 ]
 
 const EYEDROPPER_UNSUPPORTED_TITLE = 'Chrome/Edge에서만 지원됩니다'
-const CANVAS_SIZE_MIN = Math.round(cmToPx(1))
-const CANVAS_SIZE_MAX = 8000
+const CANVAS_SIZE_MIN = CANVAS_SIZE_MIN_PX
+const CANVAS_SIZE_MAX = CANVAS_SIZE_MAX_PX
 const OBJECT_SIZE_MIN = Math.round(cmToPx(0.1))
-const OBJECT_SIZE_MAX = 8000
+const OBJECT_SIZE_MAX = CANVAS_SIZE_MAX_PX
 const LINE_LENGTH_MIN = Math.round(cmToPx(0.5))
-const LINE_LENGTH_MAX = 8000
+const LINE_LENGTH_MAX = CANVAS_SIZE_MAX_PX
 const LINE_STROKE_MIN_CM = 0.01
 const LINE_STROKE_MIN_PX = cmToPx(LINE_STROKE_MIN_CM)
 const LINE_STROKE_MAX_PX = cmToPx(5)
