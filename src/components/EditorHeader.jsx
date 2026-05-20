@@ -7,7 +7,9 @@ import {
   FileText,
   FileType,
   Home,
+  Redo2,
   Save,
+  Undo2,
   Upload,
 } from 'lucide-react'
 import { useEditor } from '../context/EditorContext'
@@ -73,6 +75,11 @@ export function EditorHeader({
     markClean,
     runWithoutDirty,
     fitToScreen,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    resetHistory,
   } = useEditor()
   const [open, setOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -86,6 +93,39 @@ export function EditorHeader({
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!canvas || exporting) return
+      const t = e.target
+      if (
+        t instanceof HTMLTextAreaElement ||
+        t instanceof HTMLInputElement ||
+        (t instanceof HTMLElement && t.isContentEditable)
+      ) {
+        return
+      }
+
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod) return
+
+      const key = e.key.toLowerCase()
+      if (key === 'z' && !e.shiftKey) {
+        if (!canUndo) return
+        e.preventDefault()
+        void undo()
+        return
+      }
+      if (key === 'y' || (key === 'z' && e.shiftKey)) {
+        if (!canRedo) return
+        e.preventDefault()
+        void redo()
+      }
+    }
+
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [canvas, exporting, canUndo, canRedo, undo, redo])
 
   const handleHome = useCallback(() => {
     if (!confirmLeaveIfDirty(isDirty)) return
@@ -137,6 +177,7 @@ export function EditorHeader({
           fitToScreen()
           markClean()
         })
+        resetHistory()
       } catch (err) {
         console.error(err)
         window.alert(
@@ -144,7 +185,7 @@ export function EditorHeader({
         )
       }
     },
-    [canvas, runWithoutDirty, onWorkStateLoaded, fitToScreen, markClean],
+    [canvas, runWithoutDirty, onWorkStateLoaded, fitToScreen, markClean, resetHistory],
   )
 
   const runExport = useCallback(
@@ -265,6 +306,26 @@ export function EditorHeader({
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void undo()}
+          disabled={uiLocked || !canUndo}
+          className="rounded-xl p-2 text-[#5c6370] hover:bg-[#f0f2f6] disabled:pointer-events-none disabled:opacity-40"
+          title="실행 취소 (Ctrl+Z)"
+          aria-label="실행 취소"
+        >
+          <Undo2 className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => void redo()}
+          disabled={uiLocked || !canRedo}
+          className="rounded-xl p-2 text-[#5c6370] hover:bg-[#f0f2f6] disabled:pointer-events-none disabled:opacity-40"
+          title="다시 실행 (Ctrl+Y)"
+          aria-label="다시 실행"
+        >
+          <Redo2 className="h-5 w-5" />
+        </button>
         <input
           ref={loadInputRef}
           type="file"

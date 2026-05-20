@@ -29,6 +29,7 @@ import {
 } from '../lib/canvasZoom'
 import { ensureAppFontsReady, loadCanvasTextFontsAndRender } from '../lib/appFonts'
 import { attachCanvasTextOverlay } from '../lib/fabricTextOverlay'
+import { attachCanvasHistory } from '../lib/canvasHistory'
 
 const ZOOM_BTN_FACTOR = 1.12
 
@@ -68,8 +69,15 @@ export function FabricWorkspace({
   const [zoomPct, setZoomPct] = useState(100)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
-  const { registerCanvas, setSelected, bump, registerFitToScreen, runWithoutDirty } =
-    useEditor()
+  const {
+    registerCanvas,
+    setSelected,
+    bump,
+    registerFitToScreen,
+    runWithoutDirty,
+    registerHistory,
+    syncHistoryState,
+  } = useEditor()
 
   useLayoutEffect(() => {
     sizeRef.current = { width, height }
@@ -190,6 +198,8 @@ export function FabricWorkspace({
 
     let cancelled = false
     let inst = null
+    /** @type {ReturnType<typeof attachCanvasHistory> | null} */
+    let historyCtrl = null
 
     const onKey = (ev) => {
       if (!inst || (ev.key !== 'Delete' && ev.key !== 'Backspace')) return
@@ -239,6 +249,9 @@ export function FabricWorkspace({
 
       attachCanvasTextOverlay(inst)
 
+      historyCtrl = attachCanvasHistory(inst, { onChange: syncHistoryState })
+      registerHistory(historyCtrl)
+
       window.addEventListener('keydown', onKey)
 
       setLoading(true)
@@ -270,6 +283,7 @@ export function FabricWorkspace({
         lh = logicalAfterLoad.height
         await loadCanvasTextFontsAndRender(inst)
         if (cancelled) return
+        historyCtrl?.reset()
         const templateObj = inst
           .getObjects()
           .find((o) => isTemplateLayerObject(o))
@@ -300,6 +314,9 @@ export function FabricWorkspace({
       window.removeEventListener('keydown', onKey)
       canvasReadyRef.current = false
       if (inst) {
+        historyCtrl?.dispose()
+        historyCtrl = null
+        registerHistory(null)
         inst.dispose()
         fabricRef.current = null
         registerCanvas(null)
@@ -315,6 +332,8 @@ export function FabricWorkspace({
     registerCanvas,
     setSelected,
     bump,
+    registerHistory,
+    syncHistoryState,
   ])
 
   useEffect(() => {
