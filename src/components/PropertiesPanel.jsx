@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   Pipette,
   Trash2,
   AlignLeft,
@@ -549,6 +550,20 @@ export function PropertiesPanel({
                   </select>
                 </label>
                 <FontUploadRow onFontLoaded={onCustomFont} />
+                <p
+                  className="flex gap-1.5 text-[11px] leading-snug text-[#999]"
+                  role="note"
+                >
+                  <AlertTriangle
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                    aria-hidden
+                  />
+                  <span>
+                    업로드한 폰트의 저작권은 사용자에게 있습니다.
+                    <br />
+                    상업적 사용 시 라이선스를 확인하세요.
+                  </span>
+                </p>
                 <TextFormattingControls
                   selected={selected}
                   applyToSelection={applyToSelection}
